@@ -21,12 +21,20 @@ Thumbs.db
 .idea/
 
 # outputs
-outputs/
+outputs/*
+!outputs/.gitkeep
 
 # data (필요 시 추가 고려 - 초기 제외)
-data/raw/
-data/interim/
-data/processed/
+data/*
+!data/raw/
+!data/interim/
+!data/processed/
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
 
 # local experiment artifacts
 *.log
