@@ -1,2 +1,2 @@
-# Capstone_Design_AirChoice
-Flight-Decision-Advisor
+# Capstone_Design
+An Airfare Decision Support Dashboard for Consumer Cost-Efficiency
