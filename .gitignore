@@ -1,2 +1,33 @@
+# env
 .env
 .env.local
+
+# python cache
+__pycache__/
+*.py[cod]
+
+# notebook/cache
+.ipynb_checkpoints/
+
+# virtual env
+.venv/
+venv/
+env/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# outputs
+outputs/
+
+# data (필요 시 추가 고려 - 초기 제외)
+data/raw/
+data/interim/
+data/processed/
+
+# local experiment artifacts
+*.log
+*.tmp
