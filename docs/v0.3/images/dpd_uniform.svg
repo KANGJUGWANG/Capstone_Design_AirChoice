@@ -1,0 +1,73 @@
+<svg width="100%" viewBox="0 0 680 490" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <!-- 평행사변형 클립 -->
+    <clipPath id="para-clip">
+      <polygon points="84,427 500,70 602,70 185,427"/>
+    </clipPath>
+  </defs>
+
+  <!-- DPD 수평 격자선 -->
+  <line x1="74" y1="340" x2="618" y2="340" stroke="#D3D1C7" stroke-width="0.5" stroke-dasharray="4 4"/>
+  <line x1="74" y1="250" x2="618" y2="250" stroke="#D3D1C7" stroke-width="0.5" stroke-dasharray="4 4"/>
+  <line x1="74" y1="160" x2="618" y2="160" stroke="#D3D1C7" stroke-width="0.5" stroke-dasharray="4 4"/>
+  <line x1="74" y1="70"  x2="618" y2="70"  stroke="#D3D1C7" stroke-width="0.5" stroke-dasharray="4 4"/>
+
+  <!-- 밴드: DPD 구간별 교대 색상 (클립 적용) -->
+  <!-- Band 1: DPD 1-30 (y=340~427) -->
+  <rect x="0" y="340" width="680" height="90" fill="#9FE1CB" clip-path="url(#para-clip)"/>
+  <!-- Band 2: DPD 31-60 (y=250~340) -->
+  <rect x="0" y="250" width="680" height="90" fill="#E1F5EE" clip-path="url(#para-clip)"/>
+  <!-- Band 3: DPD 61-90 (y=160~250) -->
+  <rect x="0" y="160" width="680" height="90" fill="#9FE1CB" clip-path="url(#para-clip)"/>
+  <!-- Band 4: DPD 91-120 (y=70~160) -->
+  <rect x="0" y="70"  width="680" height="90" fill="#E1F5EE" clip-path="url(#para-clip)"/>
+
+  <!-- 평행사변형 테두리 -->
+  <polygon points="84,427 500,70 602,70 185,427" fill="none" stroke="#1D9E75" stroke-width="1.5"/>
+
+  <!-- 각 밴드 폭 화살표 및 레이블 -->
+  <!-- Band 1 mid DPD=15: y=430-15*3=385, left=80+15*3.5=132.5, right=80+44*3.5=234 -->
+  <line x1="133" y1="383" x2="234" y2="383" stroke="#085041" stroke-width="1.5" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text font-family="sans-serif" font-size="10" fill="#085041" x="183" y="376" text-anchor="middle">30일분</text>
+
+  <!-- Band 2 mid DPD=45: y=430-45*3=295, left=80+45*3.5=237.5, right=80+74*3.5=339 -->
+  <line x1="238" y1="293" x2="339" y2="293" stroke="#085041" stroke-width="1.5" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text font-family="sans-serif" font-size="10" fill="#085041" x="288" y="286" text-anchor="middle">30일분</text>
+
+  <!-- Band 3 mid DPD=75: y=430-75*3=205, left=80+75*3.5=342.5, right=80+104*3.5=444 -->
+  <line x1="343" y1="203" x2="444" y2="203" stroke="#085041" stroke-width="1.5" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text font-family="sans-serif" font-size="10" fill="#085041" x="393" y="196" text-anchor="middle">30일분</text>
+
+  <!-- Band 4 mid DPD=105: y=430-105*3=115, left=80+105*3.5=447.5, right=80+134*3.5=549 -->
+  <line x1="448" y1="113" x2="549" y2="113" stroke="#085041" stroke-width="1.5" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text font-family="sans-serif" font-size="10" fill="#085041" x="498" y="106" text-anchor="middle">30일분</text>
+
+  <!-- 밴드 DPD 레이블 (우측) -->
+  <text font-family="sans-serif" font-size="11" fill="#444441" x="622" y="388" dominant-baseline="central">DPD 1~30</text>
+  <text font-family="sans-serif" font-size="11" fill="#444441" x="622" y="298" dominant-baseline="central">DPD 31~60</text>
+  <text font-family="sans-serif" font-size="11" fill="#444441" x="622" y="208" dominant-baseline="central">DPD 61~90</text>
+  <text font-family="sans-serif" font-size="11" fill="#444441" x="622" y="115" dominant-baseline="central">DPD 91~120</text>
+
+  <!-- 축 -->
+  <line x1="74" y1="430" x2="618" y2="430" stroke="#888780" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="74" y1="442" x2="74" y2="44" stroke="#888780" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Y축 DPD 레이블 -->
+  <text font-family="sans-serif" font-size="12" fill="#5F5E5A" x="66" y="430" text-anchor="end" dominant-baseline="central">0</text>
+  <text font-family="sans-serif" font-size="12" fill="#5F5E5A" x="66" y="340" text-anchor="end" dominant-baseline="central">30</text>
+  <text font-family="sans-serif" font-size="12" fill="#5F5E5A" x="66" y="250" text-anchor="end" dominant-baseline="central">60</text>
+  <text font-family="sans-serif" font-size="12" fill="#5F5E5A" x="66" y="160" text-anchor="end" dominant-baseline="central">90</text>
+  <text font-family="sans-serif" font-size="12" fill="#5F5E5A" x="66" y="70"  text-anchor="end" dominant-baseline="central">120</text>
+
+  <!-- 축 제목 -->
+  <text font-family="sans-serif" font-size="12" fill="#444441" x="330" y="458" text-anchor="middle">출발예정일 →</text>
+  <text font-family="sans-serif" font-size="12" fill="#444441" x="26" y="250" text-anchor="middle" transform="rotate(-90,26,250)">DPD →</text>
+
+  <!-- 핵심 메시지 -->
+  <rect x="160" y="440" width="330" height="40" rx="6" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.5"/>
+  <text font-family="sans-serif" font-size="12" font-weight="500" fill="#085041" x="325" y="455" text-anchor="middle">모든 DPD 구간 = 동일한 수집량</text>
+  <text font-family="sans-serif" font-size="11" fill="#0F6E56" x="325" y="471" text-anchor="middle">→ 편향 없이 전체 평행사변형 학습 데이터로 사용 가능</text>
+</svg>
