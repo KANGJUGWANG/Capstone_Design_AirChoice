@@ -1,0 +1,128 @@
+<svg width="100%" viewBox="0 0 680 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <clipPath id="clip-br">
+      <polygon points="390,262 560,132 622,132 452,262"/>
+    </clipPath>
+  </defs>
+
+  <!-- 구분선 -->
+  <line x1="340" y1="10" x2="340" y2="310" stroke="#D3D1C7" stroke-width="1" stroke-dasharray="6 4"/>
+
+  
+
+  <!-- ══════ 좌: 직사각형 구간 추출 결과 ══════ -->
+  <rect x="16" y="30" width="300" height="22" rx="6" fill="#C8E6C9" stroke="#2E7D32" stroke-width="0.5"/>
+  <text font-family="sans-serif" font-size="11" font-weight="500" fill="#1B5E20" x="166" y="45" text-anchor="middle">특정 출발일 전체 가격 곡선 분석</text>
+
+  <!-- 직사각형 데이터 배경 -->
+  <rect x="66" y="62" width="200" height="150" fill="#A5D6A7" opacity="0.7"/>
+
+  <!-- 격자 수평 -->
+  <line x1="66" y1="72"  x2="266" y2="72"  stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="82"  x2="266" y2="82"  stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="92"  x2="266" y2="92"  stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="102" x2="266" y2="102" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="112" x2="266" y2="112" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="122" x2="266" y2="122" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="132" x2="266" y2="132" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="142" x2="266" y2="142" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="152" x2="266" y2="152" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="162" x2="266" y2="162" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="172" x2="266" y2="172" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="182" x2="266" y2="182" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="192" x2="266" y2="192" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="66" y1="202" x2="266" y2="202" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+
+  <!-- 격자 수직 -->
+  <line x1="84"  y1="62" x2="84"  y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="102" y1="62" x2="102" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="120" y1="62" x2="120" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="138" y1="62" x2="138" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="156" y1="62" x2="156" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="174" y1="62" x2="174" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="192" y1="62" x2="192" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="210" y1="62" x2="210" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="228" y1="62" x2="228" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+  <line x1="246" y1="62" x2="246" y2="212" stroke="#388E3C" stroke-width="0.5" opacity="0.6"/>
+
+  <!-- 직사각형 테두리 -->
+  <rect x="66" y="62" width="200" height="150" fill="none" stroke="#2E7D32" stroke-width="2.5"/>
+
+  <!-- 축 좌 -->
+  <line x1="58" y1="216" x2="272" y2="216" stroke="#888780" stroke-width="0.8" marker-end="url(#arr)"/>
+  <line x1="58" y1="222" x2="58" y2="54" stroke="#888780" stroke-width="0.8" marker-end="url(#arr)"/>
+  <text font-family="sans-serif" font-size="10" fill="#888780" x="165" y="230" text-anchor="middle">출발예정일 →</text>
+  <text font-family="sans-serif" font-size="10" fill="#888780" x="42" y="137" text-anchor="middle" transform="rotate(-90,42,137)">DPD →</text>
+  <text font-family="sans-serif" font-size="10" fill="#888780" x="54" y="212" text-anchor="end">0</text>
+  <text font-family="sans-serif" font-size="10" fill="#888780" x="54" y="64" text-anchor="end">120</text>
+
+  <!-- 설명 좌 -->
+  <rect x="16" y="244" width="300" height="40" rx="6" fill="#C8E6C9" stroke="#2E7D32" stroke-width="0.5"/>
+  <text font-family="sans-serif" font-size="11" font-weight="500" fill="#1B5E20" x="166" y="261" text-anchor="middle">결과 데이터 모양: 직사각형</text>
+  <text font-family="sans-serif" font-size="11" fill="#2E7D32" x="166" y="276" text-anchor="middle">전 DPD 관측 출발일만 사용 → 제한적</text>
+
+  <!-- ══════ 우: 우리 실제 수집 데이터 ══════ -->
+  <rect x="358" y="30" width="306" height="22" rx="6" fill="#BBDEFB" stroke="#1565C0" stroke-width="0.5"/>
+  <text font-family="sans-serif" font-size="11" font-weight="500" fill="#0D47A1" x="511" y="45" text-anchor="middle">BUY/WAIT 모델 학습 (우리 데이터)</text>
+
+  <!-- 평행사변형 배경 -->
+  <polygon points="390,262 560,132 622,132 452,262" fill="#BBDEFB" opacity="0.65"/>
+
+  <!-- 격자 수평 (클립) -->
+  <line x1="390" y1="142" x2="622" y2="142" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="152" x2="622" y2="152" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="162" x2="622" y2="162" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="172" x2="622" y2="172" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="182" x2="622" y2="182" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="192" x2="622" y2="192" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="202" x2="622" y2="202" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="212" x2="622" y2="212" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="222" x2="622" y2="222" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="232" x2="622" y2="232" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="242" x2="622" y2="242" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="390" y1="252" x2="622" y2="252" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+
+  <!-- 격자 수직 (클립) -->
+  <line x1="402" y1="132" x2="402" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="414" y1="132" x2="414" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="426" y1="132" x2="426" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="438" y1="132" x2="438" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="450" y1="132" x2="450" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="462" y1="132" x2="462" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="474" y1="132" x2="474" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="486" y1="132" x2="486" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="498" y1="132" x2="498" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="510" y1="132" x2="510" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="522" y1="132" x2="522" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="534" y1="132" x2="534" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="546" y1="132" x2="546" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="558" y1="132" x2="558" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="570" y1="132" x2="570" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="582" y1="132" x2="582" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="594" y1="132" x2="594" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="606" y1="132" x2="606" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+  <line x1="618" y1="132" x2="618" y2="262" stroke="#90CAF9" stroke-width="0.5" clip-path="url(#clip-br)"/>
+
+  <!-- 평행사변형 테두리 -->
+  <polygon points="390,262 560,132 622,132 452,262" fill="none" stroke="#1565C0" stroke-width="2" stroke-dasharray="7 3"/>
+
+  <!-- 체크 -->
+  <circle cx="606" cy="152" r="13" fill="#1D9E75"/>
+  <path d="M599,152 L604,158 L614,145" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- 축 우 -->
+  <line x1="382" y1="266" x2="630" y2="266" stroke="#888780" stroke-width="0.8" marker-end="url(#arr)"/>
+  <line x1="382" y1="272" x2="382" y2="124" stroke="#888780" stroke-width="0.8" marker-end="url(#arr)"/>
+  <text font-family="sans-serif" font-size="10" fill="#888780" x="506" y="280" text-anchor="middle">출발예정일 →</text>
+  <text font-family="sans-serif" font-size="10" fill="#888780" x="366" y="197" text-anchor="middle" transform="rotate(-90,366,197)">DPD →</text>
+  <text font-family="sans-serif" font-size="10" fill="#888780" x="378" y="262" text-anchor="end">0</text>
+  <text font-family="sans-serif" font-size="10" fill="#888780" x="378" y="134" text-anchor="end">120</text>
+
+  <!-- 설명 우 -->
+  <rect x="358" y="244" width="306" height="40" rx="6" fill="#BBDEFB" stroke="#1565C0" stroke-width="0.5"/>
+  <text font-family="sans-serif" font-size="11" font-weight="500" fill="#0D47A1" x="511" y="261" text-anchor="middle">결과 데이터 모양: 평행사변형</text>
+  <text font-family="sans-serif" font-size="11" fill="#1565C0" x="511" y="276" text-anchor="middle">전체 DPD 기준 활용 가능 ✓</text>
+</svg>
