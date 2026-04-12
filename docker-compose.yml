@@ -64,3 +64,24 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+
+  loader:
+    build:
+      context: .
+      dockerfile: docker/loader/Dockerfile
+    container_name: capstone-loader
+    restart: unless-stopped
+    working_dir: /workspace
+    env_file:
+      - .env
+    environment:
+      CAPSTONE_BASE_DIR: /workspace
+    command: ["bash", "-lc", "sleep infinity"]
+    volumes:
+      - ./src:/workspace/src
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./requirements:/workspace/requirements
+    depends_on:
+      mysql:
+        condition: service_healthy
