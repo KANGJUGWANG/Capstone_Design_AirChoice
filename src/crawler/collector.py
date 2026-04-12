@@ -12,6 +12,7 @@ from src.crawler.constants import (
     CARD_SELECTORS,
     DPD_MAX,
     DPD_MIN,
+    DPD_PARALLEL,
     INTERCEPT,
     ONEWAY_ROUTES,
     PLAYWRIGHT_LAUNCH_ARGS,
@@ -21,7 +22,7 @@ from src.crawler.constants import (
     ROUNDTRIP_ROUTES,
     STAY_NIGHTS,
 )
-from src.crawler.parser import extract_cards, parse_card, parse_chunks
+from src.crawler.parser import extract_cards, parse_chunks
 from src.crawler.url_builder import build_url
 
 
@@ -42,7 +43,7 @@ log = logging.getLogger(__name__)
 
 async def get_card_els(page: Page) -> list:
     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-    await page.wait_for_timeout(1200)
+    await page.wait_for_timeout(1_200)
     await page.evaluate("window.scrollTo(0, 0)")
     await page.wait_for_timeout(400)
 
@@ -81,7 +82,11 @@ async def collect_oneway(
 
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(5_000)
+        # networkidle: 네트워크 요청이 500ms 동안 없으면 즉시 통과, 최대 10초
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10_000)
+        except Exception:
+            pass  # timeout 시 수집된 것만 사용
     finally:
         page.remove_listener("response", capture)
         await ctx.close()
@@ -153,7 +158,10 @@ async def process_roundtrip_card(
             log.debug("[%s] 카드 %s 타임아웃 (%s)", tag, card_idx, ob_fn)
 
         await page.go_back()
-        await page.wait_for_timeout(2_000)
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=8_000)
+        except Exception:
+            pass
         return []
 
     async def capture_extra(resp):
@@ -165,7 +173,10 @@ async def process_roundtrip_card(
                 pass
 
     page.on("response", capture_extra)
-    await page.wait_for_timeout(1_500)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=5_000)
+    except Exception:
+        pass
     page.remove_listener("response", capture_extra)
 
     ret_cards: list[dict] = []
@@ -181,7 +192,10 @@ async def process_roundtrip_card(
     ]
 
     await page.go_back()
-    await page.wait_for_timeout(2_000)
+    try:
+        await page.wait_for_load_state("domcontentloaded", timeout=8_000)
+    except Exception:
+        pass
 
     return [
         {
@@ -234,7 +248,10 @@ async def collect_roundtrip(
     page.on("response", capture_stage1)
 
     await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-    await page.wait_for_timeout(5_000)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=10_000)
+    except Exception:
+        pass
     page.remove_listener("response", capture_stage1)
 
     stage1_cards: list[dict] = []
@@ -278,80 +295,85 @@ async def collect_roundtrip(
     return url, unique
 
 
-async def collect_date(browser: Browser, dep_date: date) -> None:
-    ret_date = dep_date + timedelta(days=STAY_NIGHTS)
-    dpd = (dep_date - date.today()).days
-    observed_at = date.today().isoformat()
+async def collect_date(
+    browser: Browser,
+    dep_date: date,
+    sem: asyncio.Semaphore,
+) -> None:
+    async with sem:
+        ret_date = dep_date + timedelta(days=STAY_NIGHTS)
+        dpd = (dep_date - date.today()).days
+        observed_at = date.today().isoformat()
 
-    output_dir = settings.raw_google_flights_dir / date.today().isoformat()
-    output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = settings.raw_google_flights_dir / date.today().isoformat()
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    oneway_results = await asyncio.gather(*[
-        collect_oneway(browser, dep_date, origin, dest)
-        for origin, dest in ONEWAY_ROUTES
-    ])
+        oneway_results = await asyncio.gather(*[
+            collect_oneway(browser, dep_date, origin, dest)
+            for origin, dest in ONEWAY_ROUTES
+        ])
 
-    roundtrip_results = await asyncio.gather(*[
-        collect_roundtrip(browser, dep_date, ret_date, origin, dest)
-        for origin, dest in ROUNDTRIP_ROUTES
-    ])
+        roundtrip_results = await asyncio.gather(*[
+            collect_roundtrip(browser, dep_date, ret_date, origin, dest)
+            for origin, dest in ROUNDTRIP_ROUTES
+        ])
 
-    for (origin, dest), (ow_url, ow_cards) in zip(ONEWAY_ROUTES, oneway_results):
-        file_name = f"{dep_date.isoformat()}_oneway_{origin}_{dest}.json"
-        (output_dir / file_name).write_text(
-            json.dumps(
-                {
-                    "observed_at": observed_at,
-                    "route_type": "oneway",
-                    "origin": origin,
-                    "dest": dest,
-                    "dep_date": dep_date.isoformat(),
-                    "ret_date": None,
-                    "stay_nights": None,
-                    "dpd": dpd,
-                    "search_url": ow_url,
-                    "card_count": len(ow_cards),
-                    "cards": ow_cards,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
+        for (origin, dest), (ow_url, ow_cards) in zip(ONEWAY_ROUTES, oneway_results):
+            file_name = f"{dep_date.isoformat()}_oneway_{origin}_{dest}.json"
+            (output_dir / file_name).write_text(
+                json.dumps(
+                    {
+                        "observed_at": observed_at,
+                        "route_type": "oneway",
+                        "origin": origin,
+                        "dest": dest,
+                        "dep_date": dep_date.isoformat(),
+                        "ret_date": None,
+                        "stay_nights": None,
+                        "dpd": dpd,
+                        "search_url": ow_url,
+                        "card_count": len(ow_cards),
+                        "cards": ow_cards,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+        for (origin, dest), (rt_url, rt_combos) in zip(ROUNDTRIP_ROUTES, roundtrip_results):
+            file_name = f"{dep_date.isoformat()}_roundtrip_{origin}_{dest}.json"
+            (output_dir / file_name).write_text(
+                json.dumps(
+                    {
+                        "observed_at": observed_at,
+                        "route_type": "roundtrip",
+                        "origin": origin,
+                        "dest": dest,
+                        "dep_date": dep_date.isoformat(),
+                        "ret_date": ret_date.isoformat(),
+                        "stay_nights": STAY_NIGHTS,
+                        "dpd": dpd,
+                        "search_url": rt_url,
+                        "combo_count": len(rt_combos),
+                        "combos": rt_combos,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+        oneway_total = sum(len(cards) for _, cards in oneway_results)
+        roundtrip_total = sum(len(combos) for _, combos in roundtrip_results)
+
+        log.info(
+            "[DPD=%s %s] 완료  편도=%s건  왕복=%s건",
+            dpd,
+            dep_date,
+            oneway_total,
+            roundtrip_total,
         )
-
-    for (origin, dest), (rt_url, rt_combos) in zip(ROUNDTRIP_ROUTES, roundtrip_results):
-        file_name = f"{dep_date.isoformat()}_roundtrip_{origin}_{dest}.json"
-        (output_dir / file_name).write_text(
-            json.dumps(
-                {
-                    "observed_at": observed_at,
-                    "route_type": "roundtrip",
-                    "origin": origin,
-                    "dest": dest,
-                    "dep_date": dep_date.isoformat(),
-                    "ret_date": ret_date.isoformat(),
-                    "stay_nights": STAY_NIGHTS,
-                    "dpd": dpd,
-                    "search_url": rt_url,
-                    "combo_count": len(rt_combos),
-                    "combos": rt_combos,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-
-    oneway_total = sum(len(cards) for _, cards in oneway_results)
-    roundtrip_total = sum(len(combos) for _, combos in roundtrip_results)
-
-    log.info(
-        "[DPD=%s %s] 완료  편도=%s건  왕복=%s건",
-        dpd,
-        dep_date,
-        oneway_total,
-        roundtrip_total,
-    )
 
 
 async def run_collection() -> None:
@@ -369,6 +391,11 @@ async def run_collection() -> None:
     log.info("왕복 노선: %s", [f"{o}↔{d}" for o, d in ROUNDTRIP_ROUTES])
     log.info("출력 경로: %s", output_dir)
     log.info("로그 파일: %s", _log_file)
+    log.info("DPD 병렬 수: %s", DPD_PARALLEL)
+
+    # DPD_PARALLEL 수만큼 동시 수집
+    # 각 DPD 내부에서 편도 4노선 + 왕복 4노선이 gather로 병렬 실행됨
+    sem = asyncio.Semaphore(DPD_PARALLEL)
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(
@@ -376,8 +403,10 @@ async def run_collection() -> None:
             args=PLAYWRIGHT_LAUNCH_ARGS,
         )
         try:
-            for dep_date in dep_dates:
-                await collect_date(browser, dep_date)
+            await asyncio.gather(*[
+                collect_date(browser, dep_date, sem)
+                for dep_date in dep_dates
+            ])
         finally:
             await browser.close()
 
