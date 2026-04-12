@@ -41,6 +41,21 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+async def _wait_for_response(page: Page, min_ms: int = 2_000, networkidle_timeout: int = 10_000) -> None:
+    """
+    최소 대기 후 networkidle 동적 대기.
+
+    병렬 수집 시 networkidle만 사용하면 다른 컨텍스트의 네트워크 상태가
+    조용해지는 시점에 premature trigger가 발생할 수 있음.
+    최소 대기(min_ms)로 인터셉트 대상 응답을 먼저 확보한 뒤 networkidle 적용.
+    """
+    await page.wait_for_timeout(min_ms)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=networkidle_timeout)
+    except Exception:
+        pass  # timeout 시 수집된 것만 사용
+
+
 async def get_card_els(page: Page) -> list:
     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
     await page.wait_for_timeout(1_200)
@@ -82,11 +97,7 @@ async def collect_oneway(
 
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        # networkidle: 네트워크 요청이 500ms 동안 없으면 즉시 통과, 최대 10초
-        try:
-            await page.wait_for_load_state("networkidle", timeout=10_000)
-        except Exception:
-            pass  # timeout 시 수집된 것만 사용
+        await _wait_for_response(page, min_ms=2_000, networkidle_timeout=10_000)
     finally:
         page.remove_listener("response", capture)
         await ctx.close()
@@ -173,10 +184,8 @@ async def process_roundtrip_card(
                 pass
 
     page.on("response", capture_extra)
-    try:
-        await page.wait_for_load_state("networkidle", timeout=5_000)
-    except Exception:
-        pass
+    # 카드 클릭 후 추가 응답 대기: 최소 500ms + networkidle
+    await _wait_for_response(page, min_ms=500, networkidle_timeout=5_000)
     page.remove_listener("response", capture_extra)
 
     ret_cards: list[dict] = []
@@ -248,10 +257,7 @@ async def collect_roundtrip(
     page.on("response", capture_stage1)
 
     await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-    try:
-        await page.wait_for_load_state("networkidle", timeout=10_000)
-    except Exception:
-        pass
+    await _wait_for_response(page, min_ms=2_000, networkidle_timeout=10_000)
     page.remove_listener("response", capture_stage1)
 
     stage1_cards: list[dict] = []
@@ -393,8 +399,6 @@ async def run_collection() -> None:
     log.info("로그 파일: %s", _log_file)
     log.info("DPD 병렬 수: %s", DPD_PARALLEL)
 
-    # DPD_PARALLEL 수만큼 동시 수집
-    # 각 DPD 내부에서 편도 4노선 + 왕복 4노선이 gather로 병렬 실행됨
     sem = asyncio.Semaphore(DPD_PARALLEL)
 
     async with async_playwright() as playwright:
