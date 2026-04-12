@@ -1,0 +1,66 @@
+version: "2.4"
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: capstone-mysql
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  app:
+    image: python:3.11-slim
+    container_name: capstone-app
+    restart: unless-stopped
+    working_dir: /workspace
+    env_file:
+      - .env
+    environment:
+      CAPSTONE_BASE_DIR: /workspace
+    command: ["bash", "-lc", "sleep infinity"]
+    volumes:
+      - ./src:/workspace/src
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./requirements:/workspace/requirements
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  crawler:
+    build:
+      context: .
+      dockerfile: docker/crawler/Dockerfile
+    container_name: capstone-crawler
+    restart: unless-stopped
+    working_dir: /workspace
+    env_file:
+      - .env
+    environment:
+      CAPSTONE_BASE_DIR: /workspace
+    command: ["bash", "-lc", "sleep infinity"]
+    volumes:
+      - ./src:/workspace/src
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./requirements:/workspace/requirements
+    depends_on:
+      mysql:
+        condition: service_healthy
