@@ -1,0 +1,13 @@
+data/mysql
+logs
+backups
+outputs
+docs
+.env
+.env.*
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
