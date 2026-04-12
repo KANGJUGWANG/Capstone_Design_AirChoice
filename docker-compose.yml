@@ -76,6 +76,8 @@ services:
       - .env
     environment:
       CAPSTONE_BASE_DIR: /workspace
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
     command: ["bash", "-lc", "sleep infinity"]
     volumes:
       - ./src:/workspace/src
