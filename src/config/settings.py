@@ -79,6 +79,8 @@ class Settings:
     mysql_user: str | None
     mysql_password: str | None
     mysql_root_password: str | None
+    mysql_host: str
+    mysql_port: int
 
     # external keys
     airkorea_api_key: str | None
@@ -143,6 +145,8 @@ def build_settings() -> Settings:
         mysql_user=_get_env("MYSQL_USER"),
         mysql_password=_get_env("MYSQL_PASSWORD"),
         mysql_root_password=_get_env("MYSQL_ROOT_PASSWORD"),
+        mysql_host=_get_env("MYSQL_HOST", "127.0.0.1") or "127.0.0.1",
+        mysql_port=int(_get_env("MYSQL_PORT", "3306") or "3306"),
         airkorea_api_key=_get_env("AIRKOREA_API_KEY"),
         kma_api_key=_get_env("KMA_API_KEY"),
         public_data_api_key=_get_env("PUBLIC_DATA_API_KEY"),
