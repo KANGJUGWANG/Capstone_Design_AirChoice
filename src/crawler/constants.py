@@ -18,6 +18,12 @@ STAY_NIGHTS = 7
 DPD_MIN = 1
 DPD_MAX = 120
 
+# DPD 동시 수집 수
+# 편도 4 + 왕복 4 = 노선 8개가 각 DPD에서 병렬 실행되므로
+# DPD_PARALLEL=3 기준 최대 동시 컨텍스트: 3 × 8 = 24개
+# 서버 메모리 24GB 기준 안전 범위
+DPD_PARALLEL = 3
+
 INTERCEPT = "_/FlightsFrontendUi/data"
 
 TFU_BY_AIRPORT = {
