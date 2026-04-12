@@ -1,5 +1,7 @@
 FROM python:3.11-slim
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 WORKDIR /workspace
 
 COPY requirements/crawler.txt /tmp/requirements.txt
