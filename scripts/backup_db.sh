@@ -17,7 +17,6 @@ LOG_FILE="${LOG_DIR}/backup.log"
 
 MYSQL_CONTAINER="capstone-mysql"
 MYSQL_DATABASE="capstone_db"
-MYSQL_USER="root"
 ENV_FILE="${PROJECT_ROOT}/.env"
 
 RCLONE_REMOTE="gdrive"
@@ -43,7 +42,10 @@ else
     exit 1
 fi
 
+# .env에 MYSQL_USER가 있어도 백업은 항상 root로 실행
+MYSQL_USER="root"
 MYSQL_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
+
 if [[ -z "${MYSQL_PASSWORD}" ]]; then
     log "[ERROR] MYSQL_ROOT_PASSWORD 미설정"
     exit 1
