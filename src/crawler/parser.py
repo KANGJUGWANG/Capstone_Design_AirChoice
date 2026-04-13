@@ -90,15 +90,19 @@ def parse_seg(seg: list) -> dict | None:
         dep_idx = next((i for i in range(7, min(12, len(seg))) if _is_hm(seg[i])), -1)
         arr_time = _find_hm(seg, dep_idx + 1, 14, skip=dep_idx)
 
+        # seg[17]: 항공기 기종 (e.g. "Boeing 737", "Airbus A321")
+        aircraft = seg[17] if len(seg) > 17 and isinstance(seg[17], str) else None
+
         return {
-            "dep_iata": seg[3] if len(seg) > 3 else None,
-            "arr_iata": seg[6] if len(seg) > 6 else None,
-            "dep_time": dep_time,
-            "arr_time": arr_time,
+            "dep_iata":     seg[3] if len(seg) > 3 else None,
+            "arr_iata":     seg[6] if len(seg) > 6 else None,
+            "dep_time":     dep_time,
+            "arr_time":     arr_time,
             "duration_min": seg[11] if len(seg) > 11 else None,
-            "dep_date": _ymd(seg[20] if len(seg) > 20 else None),
-            "arr_date": _ymd(seg[21] if len(seg) > 21 else None),
-            "flight_no": flight_no,
+            "dep_date":     _ymd(seg[20] if len(seg) > 20 else None),
+            "arr_date":     _ymd(seg[21] if len(seg) > 21 else None),
+            "flight_no":    flight_no,
+            "aircraft":     aircraft,
         }
     except Exception:
         return None
@@ -119,14 +123,15 @@ def parse_seg_from_fi(fi: list) -> dict | None:
         arr_time = _find_hm(fi, dep_idx + 1, 12, skip=dep_idx)
 
         return {
-            "dep_iata": fi[3] if len(fi) > 3 else None,
-            "arr_iata": fi[6] if len(fi) > 6 else None,
-            "dep_time": dep_time,
-            "arr_time": arr_time,
+            "dep_iata":     fi[3] if len(fi) > 3 else None,
+            "arr_iata":     fi[6] if len(fi) > 6 else None,
+            "dep_time":     dep_time,
+            "arr_time":     arr_time,
             "duration_min": fi[9] if len(fi) > 9 else None,
-            "dep_date": _ymd(fi[4] if len(fi) > 4 and not _is_hm(fi[4]) else None),
-            "arr_date": _ymd(fi[7] if len(fi) > 7 and not _is_hm(fi[7]) else None),
-            "flight_no": flight_no,
+            "dep_date":     _ymd(fi[4] if len(fi) > 4 and not _is_hm(fi[4]) else None),
+            "arr_date":     _ymd(fi[7] if len(fi) > 7 and not _is_hm(fi[7]) else None),
+            "flight_no":    flight_no,
+            "aircraft":     None,  # fi fallback 경로에서는 seg 배열 접근 불가
         }
     except Exception:
         return None
@@ -163,20 +168,26 @@ def parse_card(card: list, idx: int) -> dict | None:
                         official_seller = {
                             "code": seller[0],
                             "name": seller[1] if len(seller) > 1 else None,
-                            "url": seller[2] if len(seller) > 2 else None,
+                            "url":  seller[2] if len(seller) > 2 else None,
                         }
                         break
         except Exception:
             pass
 
+        # stops: 세그먼트 수 - 1 (직항=0, 1경유=1)
+        stops = max(0, len(segs) - 1)
+
         return {
-            "card_index": idx,
-            "airline_code": airline_code,
-            "airline_name": airline_name,
-            "dep": dep,
-            "ret": ret,
-            "price_krw": price,
-            "official_seller": official_seller,
+            "card_index":          idx,
+            "airline_code":        airline_code,
+            "airline_name":        airline_name,
+            "dep":                 dep,
+            "ret":                 ret,
+            "price_krw":           price,
+            "official_seller":     official_seller,
+            "stops":               stops,
+            "airline_tag_present": official_seller is not None,
+            "seller_type":         "airline_official" if official_seller else "unknown",
         }
     except Exception:
         return None
