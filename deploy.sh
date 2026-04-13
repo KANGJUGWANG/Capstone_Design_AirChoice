@@ -48,7 +48,11 @@ chmod +x /srv/Capstone/run_pipeline.sh
 # backup
 curl -fsSL "${RAW}/scripts/backup_db.sh"             -o /srv/Capstone/scripts/backup_db.sh
 chmod +x /srv/Capstone/scripts/backup_db.sh
-curl -fsSL "${RAW}/deploy/systemd/airchoice-backup.service" -o /srv/Capstone/deploy/systemd/airchoice-backup.service
-curl -fsSL "${RAW}/deploy/systemd/airchoice-backup.timer"   -o /srv/Capstone/deploy/systemd/airchoice-backup.timer
+
+# systemd units
+curl -fsSL "${RAW}/deploy/systemd/airchoice-pipeline.service" -o /srv/Capstone/deploy/systemd/airchoice-pipeline.service
+curl -fsSL "${RAW}/deploy/systemd/airchoice-pipeline.timer"   -o /srv/Capstone/deploy/systemd/airchoice-pipeline.timer
+curl -fsSL "${RAW}/deploy/systemd/airchoice-backup.service"   -o /srv/Capstone/deploy/systemd/airchoice-backup.service
+curl -fsSL "${RAW}/deploy/systemd/airchoice-backup.timer"     -o /srv/Capstone/deploy/systemd/airchoice-backup.timer
 
 echo "=== AirChoice deploy complete ==="

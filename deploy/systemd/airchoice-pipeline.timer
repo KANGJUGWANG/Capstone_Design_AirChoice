@@ -1,0 +1,15 @@
+[Unit]
+Description=AirChoice Pipeline Timer (08:00 / 16:00 / 00:00 KST)
+Requires=airchoice-pipeline.service
+
+[Timer]
+# 서버 timezone: Asia/Seoul 기준
+# 확인 명령: timedatectl | grep "Time zone"
+OnCalendar=*-*-* 00:00:00
+OnCalendar=*-*-* 08:00:00
+OnCalendar=*-*-* 16:00:00
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

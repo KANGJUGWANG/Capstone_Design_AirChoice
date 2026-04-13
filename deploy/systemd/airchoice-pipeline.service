@@ -1,0 +1,16 @@
+[Unit]
+Description=AirChoice Pipeline Service (collect + insert)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/srv/Capstone
+ExecStart=/bin/bash /srv/Capstone/run_pipeline.sh
+StandardOutput=journal
+StandardError=journal
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
