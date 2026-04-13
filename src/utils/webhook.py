@@ -20,9 +20,6 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-# ---------------------------------------------------------------------------
-# 설정 로드
-# ---------------------------------------------------------------------------
 PROJECT_ROOT = Path("/srv/Capstone")
 ENV_FILE = PROJECT_ROOT / ".env"
 
@@ -49,9 +46,6 @@ MYSQL_PASSWORD  = _ENV.get("MYSQL_ROOT_PASSWORD", "")
 RAW_DIR         = PROJECT_ROOT / "data" / "raw" / "google_flights"
 
 
-# ---------------------------------------------------------------------------
-# DB 조회
-# ---------------------------------------------------------------------------
 def _query(sql: str) -> str:
     if not MYSQL_PASSWORD:
         return ""
@@ -83,14 +77,15 @@ def _query_int(sql: str, default: int = 0) -> int:
         return default
 
 
-# ---------------------------------------------------------------------------
-# 웹훅 전송
-# ---------------------------------------------------------------------------
-def _send(payload: dict) -> bool:
+def _send(embed: dict) -> bool:
+    """
+    content: "" 는 포럼 채널 호환을 위해 필수
+    """
     if not WEBHOOK_URL:
         print("[webhook] DISCORD_WEBHOOK_URL 미설정 — skip", file=sys.stderr)
         return False
     try:
+        payload = {"content": "", "embeds": [embed]}
         data = json.dumps(payload).encode("utf-8")
         req = Request(
             WEBHOOK_URL, data=data,
@@ -116,13 +111,9 @@ def _hour_label() -> str:
     return f"{datetime.now().hour:02d}:00"
 
 
-# ---------------------------------------------------------------------------
-# 이벤트별 페이로드
-# ---------------------------------------------------------------------------
 def collect_done(elapsed_min: int) -> None:
     today = _today()
     collect_dir = RAW_DIR / today
-
     route_counts: dict[str, int] = {}
     total_files = 0
 
@@ -142,13 +133,11 @@ def collect_done(elapsed_min: int) -> None:
     elapsed_h = elapsed_min // 60
     elapsed_m = elapsed_min % 60
     elapsed_str = f"{elapsed_h}h {elapsed_m}m" if elapsed_h else f"{elapsed_m}m"
-
     route_lines = "\n".join(
-        f"`{route}`: {cnt:,}건"
-        for route, cnt in sorted(route_counts.items())
+        f"`{route}`: {cnt:,}건" for route, cnt in sorted(route_counts.items())
     ) or "집계 없음"
 
-    embed = {
+    _send({
         "title": f"수집 완료 — {today} {_hour_label()}",
         "color": 0x57F287,
         "fields": [
@@ -157,8 +146,7 @@ def collect_done(elapsed_min: int) -> None:
             {"name": "노선별 카드 수 (편도)", "value": route_lines, "inline": False},
         ],
         "footer": {"text": f"AirChoice · {_now_str()}"},
-    }
-    _send({"embeds": [embed]})
+    })
 
 
 def insert_done() -> None:
@@ -167,17 +155,14 @@ def insert_done() -> None:
 
     obs_count = _query_int(f"""
         SELECT COUNT(*) FROM search_observation
-        WHERE DATE(observed_at) = '{today}'
-        AND HOUR(observed_at) = {hour}
+        WHERE DATE(observed_at) = '{today}' AND HOUR(observed_at) = {hour}
     """)
     offer_count = _query_int(f"""
         SELECT COUNT(f.offer_observation_id)
         FROM flight_offer_observation f
         JOIN search_observation s ON f.observation_id = s.observation_id
-        WHERE DATE(s.observed_at) = '{today}'
-        AND HOUR(s.observed_at) = {hour}
+        WHERE DATE(s.observed_at) = '{today}' AND HOUR(s.observed_at) = {hour}
     """)
-
     status_rows = _query_rows(f"""
         SELECT f.price_status, COUNT(*) as cnt
         FROM flight_offer_observation f
@@ -194,8 +179,8 @@ def insert_done() -> None:
         SELECT MIN(f.price_krw), MAX(f.price_krw), ROUND(AVG(f.price_krw))
         FROM flight_offer_observation f
         JOIN search_observation s ON f.observation_id = s.observation_id
-        WHERE s.route_type = 'oneway'
-        AND s.origin_iata = 'ICN' AND s.destination_iata = 'NRT'
+        WHERE s.route_type = 'oneway' AND s.origin_iata = 'ICN'
+        AND s.destination_iata = 'NRT'
         AND DATE(s.observed_at) = '{today}' AND HOUR(s.observed_at) = {hour}
         AND f.price_krw IS NOT NULL
     """)
@@ -209,7 +194,6 @@ def insert_done() -> None:
 
     total_obs   = _query_int("SELECT COUNT(*) FROM search_observation")
     total_offer = _query_int("SELECT COUNT(*) FROM flight_offer_observation")
-
     yesterday_offer = _query_int(f"""
         SELECT COUNT(f.offer_observation_id)
         FROM flight_offer_observation f
@@ -223,7 +207,7 @@ def insert_done() -> None:
         sign = "+" if delta >= 0 else ""
         delta_str = f"전회차 대비 {sign}{delta:,}건"
 
-    embed = {
+    _send({
         "title": f"적재 완료 — {today} {_hour_label()}",
         "color": 0x5865F2,
         "fields": [
@@ -233,12 +217,11 @@ def insert_done() -> None:
             {"name": "DB 누적", "value": f"search: {total_obs:,}건 / offer: {total_offer:,}건", "inline": False},
         ],
         "footer": {"text": f"AirChoice · {_now_str()}{' · ' + delta_str if delta_str else ''}"},
-    }
-    _send({"embeds": [embed]})
+    })
 
 
 def pipeline_fail(stage: str, error: str) -> None:
-    embed = {
+    _send({
         "title": f"파이프라인 실패 — {stage}",
         "color": 0xED4245,
         "fields": [
@@ -248,15 +231,14 @@ def pipeline_fail(stage: str, error: str) -> None:
             {"name": "로그", "value": "`/srv/Capstone/logs/cron.log`", "inline": False},
         ],
         "footer": {"text": "AirChoice"},
-    }
-    _send({"embeds": [embed]})
+    })
 
 
 def backup_done(size: str, filename: str) -> None:
     total_obs   = _query_int("SELECT COUNT(*) FROM search_observation")
     total_offer = _query_int("SELECT COUNT(*) FROM flight_offer_observation")
 
-    embed = {
+    _send({
         "title": f"백업 완료 — {_today()} 23:00",
         "color": 0xFEE75C,
         "fields": [
@@ -266,26 +248,19 @@ def backup_done(size: str, filename: str) -> None:
             {"name": "DB 누적", "value": f"search: {total_obs:,}건 / offer: {total_offer:,}건", "inline": False},
         ],
         "footer": {"text": f"AirChoice · {_now_str()}"},
-    }
-    _send({"embeds": [embed]})
+    })
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(description="AirChoice Discord 웹훅 알림")
     sub = parser.add_subparsers(dest="event")
 
     p_collect = sub.add_parser("collect_done")
     p_collect.add_argument("--elapsed", type=int, default=0)
-
     sub.add_parser("insert_done")
-
     p_fail = sub.add_parser("pipeline_fail")
     p_fail.add_argument("--stage", default="unknown")
     p_fail.add_argument("--error", default="비정상 종료")
-
     p_backup = sub.add_parser("backup_done")
     p_backup.add_argument("--size", default="?")
     p_backup.add_argument("--file", default="?")
