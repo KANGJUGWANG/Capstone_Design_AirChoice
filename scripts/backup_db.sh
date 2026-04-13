@@ -56,6 +56,7 @@ fi
 # ---------------------------------------------------------------------------
 DATE_TAG=$(date '+%Y%m%d_%H%M%S')
 DUMP_FILE="${BACKUP_TMP_DIR}/${MYSQL_DATABASE}_${DATE_TAG}.sql.gz"
+DUMP_FILENAME=$(basename "${DUMP_FILE}")
 
 log "========== 백업 시작 =========="
 log "대상 DB   : ${MYSQL_DATABASE}"
@@ -88,7 +89,7 @@ log "[2/3] Google Drive 업로드 중..."
 rclone copy "${DUMP_FILE}" "${RCLONE_DEST}" \
     --log-level INFO \
     --log-file "${LOG_FILE}"
-log "[2/3] 완료 — 경로: ${RCLONE_DEST}/$(basename "${DUMP_FILE}")"
+log "[2/3] 완료 — 경로: ${RCLONE_DEST}/${DUMP_FILENAME}"
 
 # ---------------------------------------------------------------------------
 # 3. 로컬 압축본 삭제 (원본 DB는 그대로 유지)
@@ -96,5 +97,12 @@ log "[2/3] 완료 — 경로: ${RCLONE_DEST}/$(basename "${DUMP_FILE}")"
 log "[3/3] 로컬 압축본 삭제..."
 rm -f "${DUMP_FILE}"
 log "[3/3] 완료"
+
+# ---------------------------------------------------------------------------
+# 4. 웹훅 알림
+# ---------------------------------------------------------------------------
+python3 "${PROJECT_ROOT}/src/utils/webhook.py" backup_done \
+    --size "${DUMP_SIZE}" \
+    --file "${DUMP_FILENAME}" || true
 
 log "========== 백업 정상 완료 =========="

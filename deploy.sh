@@ -12,6 +12,7 @@ mkdir -p /srv/Capstone/src
 mkdir -p /srv/Capstone/src/config
 mkdir -p /srv/Capstone/src/crawler
 mkdir -p /srv/Capstone/src/loaders
+mkdir -p /srv/Capstone/src/utils
 mkdir -p /srv/Capstone/docker/crawler
 mkdir -p /srv/Capstone/docker/loader
 mkdir -p /srv/Capstone/requirements
@@ -33,6 +34,8 @@ curl -fsSL "${RAW}/src/crawler/collector.py"         -o /srv/Capstone/src/crawle
 curl -fsSL "${RAW}/src/crawler/gf_collect.py"        -o /srv/Capstone/src/crawler/gf_collect.py
 curl -fsSL "${RAW}/src/loaders/__init__.py"          -o /srv/Capstone/src/loaders/__init__.py
 curl -fsSL "${RAW}/src/loaders/gf_insert.py"         -o /srv/Capstone/src/loaders/gf_insert.py
+curl -fsSL "${RAW}/src/utils/__init__.py"            -o /srv/Capstone/src/utils/__init__.py
+curl -fsSL "${RAW}/src/utils/webhook.py"             -o /srv/Capstone/src/utils/webhook.py
 
 # requirements / docker
 curl -fsSL "${RAW}/requirements/crawler.txt"         -o /srv/Capstone/requirements/crawler.txt
