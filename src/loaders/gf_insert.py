@@ -71,37 +71,41 @@ def normalize_observed_at(value: str) -> str:
 
 
 # ------------------------------------------------------------------
-# search_observation INSERT
+# search_observation INSERT IGNORE
+# raw_file_path UNIQUE 키 기준으로 중복 방지
+# 반환값: observation_id (중복 시 0)
 # ------------------------------------------------------------------
-def insert_observation(cur, data: dict) -> int:
+def insert_observation(cur, data: dict, raw_file_path: str) -> int:
     sql = """
-        INSERT INTO search_observation
+        INSERT IGNORE INTO search_observation
             (observed_at, source, route_type,
              origin_iata, destination_iata,
              departure_date, return_date, stay_nights,
-             dpd, search_url, crawl_status)
+             dpd, search_url, crawl_status, raw_file_path)
         VALUES
             (%(observed_at)s, %(source)s, %(route_type)s,
              %(origin_iata)s, %(destination_iata)s,
              %(departure_date)s, %(return_date)s, %(stay_nights)s,
-             %(dpd)s, %(search_url)s, %(crawl_status)s)
+             %(dpd)s, %(search_url)s, %(crawl_status)s, %(raw_file_path)s)
     """
 
     params = {
-        "observed_at":       normalize_observed_at(data["observed_at"]),
-        "source":            "google_flights",
-        "route_type":        data["route_type"],
-        "origin_iata":       data["origin"],
-        "destination_iata":  data["dest"],
-        "departure_date":    data["dep_date"],
-        "return_date":       data.get("ret_date"),
-        "stay_nights":       data.get("stay_nights"),
-        "dpd":               data["dpd"],
-        "search_url":        data.get("search_url", ""),
-        "crawl_status":      "success",
+        "observed_at":      normalize_observed_at(data["observed_at"]),
+        "source":           "google_flights",
+        "route_type":       data["route_type"],
+        "origin_iata":      data["origin"],
+        "destination_iata": data["dest"],
+        "departure_date":   data["dep_date"],
+        "return_date":      data.get("ret_date"),
+        "stay_nights":      data.get("stay_nights"),
+        "dpd":              data["dpd"],
+        "search_url":       data.get("search_url", ""),
+        "crawl_status":     "success",
+        "raw_file_path":    raw_file_path,
     }
 
     cur.execute(sql, params)
+    # INSERT IGNORE: 중복 시 lastrowid = 0
     return cur.lastrowid
 
 
@@ -227,8 +231,7 @@ def insert_roundtrip_offer(cur, observation_id: int, combo: dict, card_idx: int)
 
 # ------------------------------------------------------------------
 # capture_file_log INSERT
-# response_json_path: 파싱 결과 JSON 경로 (파싱 결과 = 요약본으로 취급)
-# request_json_path / summary_json_path 컬럼은 DB에서 제거됨
+# response_json_path: 파싱 결과 JSON 경로
 # ------------------------------------------------------------------
 def insert_capture_log(
     cur,
@@ -270,8 +273,9 @@ def insert_capture_log(
 def process_file(path: Path, conn) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     route_type = data["route_type"]
-    tag = f"{route_type} {data['origin']}→{data['dest']} {data['dep_date']}"
+    tag = f"{route_type} {data['origin']}\u2192{data['dest']} {data['dep_date']}"
     search_url = data.get("search_url", "")
+    raw_file_path = str(path)
 
     inserted_obs = 0
     inserted_offer = 0
@@ -282,7 +286,14 @@ def process_file(path: Path, conn) -> dict:
 
     try:
         with conn.cursor() as cur:
-            obs_id = insert_observation(cur, data)
+            obs_id = insert_observation(cur, data, raw_file_path)
+
+            # obs_id == 0: INSERT IGNORE로 중복 감지 → offer/log 전체 skip
+            if obs_id == 0:
+                log.info("[%s] 중복 파일 감지 — skip", tag)
+                conn.commit()
+                return {"status": "skip", "obs_id": 0, "offer": 0, "log": 0, "skip": 0}
+
             inserted_obs = 1
 
             if route_type == "oneway":
@@ -370,7 +381,7 @@ def main():
         return
 
     conn = get_conn()
-    total = {"ok": 0, "error": 0, "offer": 0}
+    total = {"ok": 0, "skip": 0, "error": 0, "offer": 0}
 
     try:
         for file_path in files:
@@ -378,14 +389,16 @@ def main():
             if result["status"] == "ok":
                 total["ok"] += 1
                 total["offer"] += result["offer"]
+            elif result["status"] == "skip":
+                total["skip"] += 1
             else:
                 total["error"] += 1
     finally:
         conn.close()
 
     log.info(
-        "완료  성공=%s  실패=%s  총 offer=%s건",
-        total["ok"], total["error"], total["offer"],
+        "완료  성공=%s  중복skip=%s  실패=%s  총 offer=%s건",
+        total["ok"], total["skip"], total["error"], total["offer"],
     )
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from playwright.async_api import Browser, Page, async_playwright
@@ -77,7 +77,7 @@ async def collect_oneway(
     origin: str,
     dest: str,
 ) -> tuple[str, list[dict]]:
-    tag = f"OW {origin}→{dest} {dep_date}"
+    tag = f"OW {origin}\u2192{dest} {dep_date}"
     url = build_url(dep_date, None, origin, dest)
     texts: list[str] = []
 
@@ -118,7 +118,7 @@ async def collect_oneway(
             seen.add(flight_no)
             unique.append(card)
 
-    log.info("[%s] %s건", tag, len(unique))
+    log.info("[%s] %s\uac74", tag, len(unique))
     return url, unique
 
 
@@ -138,7 +138,7 @@ async def process_roundtrip_card(
         if not t or ":" not in t:
             return t
         hour, minute = map(int, t.split(":"))
-        period = "오전" if hour < 12 else "오후"
+        period = "\uc624\uc804" if hour < 12 else "\uc624\ud6c4"
         display_hour = hour if hour <= 12 else hour - 12
         if display_hour == 0:
             display_hour = 12
@@ -147,7 +147,7 @@ async def process_roundtrip_card(
     try:
         card_text = await card_el.inner_text()
         if ob_name not in card_text or to_display_time(ob_time) not in card_text:
-            log.warning("[%s] 카드 %s 텍스트 불일치 ⚠️  %s", tag, card_idx, ob_fn)
+            log.warning("[%s] \uce74\ub4dc %s \ud14d\uc2a4\ud2b8 \ubd88\uc77c\uce58 \u26a0\ufe0f  %s", tag, card_idx, ob_fn)
     except Exception:
         pass
 
@@ -167,7 +167,7 @@ async def process_roundtrip_card(
             pass
     except Exception as e:
         if "Timeout" in str(e):
-            log.debug("[%s] 카드 %s 타임아웃 (%s)", tag, card_idx, ob_fn)
+            log.debug("[%s] \uce74\ub4dc %s \ud0c0\uc784\uc544\uc6c3 (%s)", tag, card_idx, ob_fn)
 
         await page.go_back()
         try:
@@ -223,7 +223,6 @@ async def process_roundtrip_card(
             "price_krw":             rc.get("price_krw"),
             "outbound_ref_price":    outbound.get("price_krw"),
             "official_seller":       rc.get("official_seller"),
-            # 출발편 기준 파생 필드 패스스루
             "stops":               outbound.get("stops", 0),
             "aircraft":            (outbound.get("dep") or {}).get("aircraft"),
             "airline_tag_present": outbound.get("airline_tag_present", False),
@@ -240,7 +239,7 @@ async def collect_roundtrip(
     origin: str,
     dest: str,
 ) -> tuple[str, list[dict]]:
-    tag = f"RT {origin}↔{dest} {dep_date}"
+    tag = f"RT {origin}\u2194{dest} {dep_date}"
     url = build_url(dep_date, ret_date, origin, dest)
 
     stage1_raw: list[str] = []
@@ -280,7 +279,7 @@ async def collect_roundtrip(
             seen.add(flight_no)
             outbound_unique.append(card)
 
-    log.info("[%s] 출발편: %s건", tag, len(outbound_unique))
+    log.info("[%s] \ucd9c\ubc1c\ud3b8: %s\uac74", tag, len(outbound_unique))
 
     all_combos: list[dict] = []
     for i, outbound in enumerate(outbound_unique):
@@ -302,7 +301,7 @@ async def collect_roundtrip(
             seen_combo.add(key)
             unique.append(combo)
 
-    log.info("[%s] 왕복 조합: %s건", tag, len(unique))
+    log.info("[%s] \uc655\ubcf5 \uc870\ud569: %s\uac74", tag, len(unique))
     return url, unique
 
 
@@ -310,11 +309,11 @@ async def collect_date(
     browser: Browser,
     dep_date: date,
     sem: asyncio.Semaphore,
+    collected_at: str,
 ) -> None:
     async with sem:
         ret_date = dep_date + timedelta(days=STAY_NIGHTS)
         dpd = (dep_date - date.today()).days
-        observed_at = date.today().isoformat()
 
         output_dir = settings.raw_google_flights_dir / date.today().isoformat()
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -334,7 +333,7 @@ async def collect_date(
             (output_dir / file_name).write_text(
                 json.dumps(
                     {
-                        "observed_at": observed_at,
+                        "observed_at": collected_at,
                         "route_type": "oneway",
                         "origin": origin,
                         "dest": dest,
@@ -357,7 +356,7 @@ async def collect_date(
             (output_dir / file_name).write_text(
                 json.dumps(
                     {
-                        "observed_at": observed_at,
+                        "observed_at": collected_at,
                         "route_type": "roundtrip",
                         "origin": origin,
                         "dest": dest,
@@ -379,39 +378,44 @@ async def collect_date(
         roundtrip_total = sum(len(combos) for _, combos in roundtrip_results)
 
         log.info(
-            "[DPD=%s %s] 완료  편도=%s건  왕복=%s건",
-            dpd,
-            dep_date,
-            oneway_total,
-            roundtrip_total,
+            "[DPD=%s %s] \uc644\ub8cc  \ud3b8\ub3c4=%s\uac74  \uc655\ubcf5=%s\uac74",
+            dpd, dep_date, oneway_total, roundtrip_total,
         )
 
 
 async def run_collection(dep_date: Optional[date] = None) -> None:
     """
-    dep_date 지정 시: 해당 날짜 1개만 수집 (테스트용)
-    dep_date 미지정 시: DPD 1~120 전체 수집 (운영 기본 동작)
+    dep_date \uc9c0\uc815 \uc2dc: \ud574\ub2f9 \ub0a0\uc9dc 1\uac1c\ub9cc \uc218\uc9d1 (\ud14c\uc2a4\ud2b8\uc6a9)
+    dep_date \ubbf8\uc9c0\uc815 \uc2dc: DPD 1~120 \uc804\uccb4 \uc218\uc9d1 (\uc6b4\uc601 \uae30\ubcf8 \ub3d9\uc791)
+
+    collected_at: \uc2e4\ud589 \uc2dc\uc791 \uc2dc\uac01 (\uc2dc\uac04\uae4c\uc9c0\ub9cc, \ubd84/\ucd08=00)
+    \uc608: 2026-04-13 08:00:00
+    \ud558\ub8e8 3\ud68c \uc218\uc9d1(08\uc2dc, 16\uc2dc, 00\uc2dc) \ud68c\ucc28 \uad6c\ubd84 \uae30\uc900
     """
     today = date.today()
 
+    # \uc218\uc9d1 \uc2dc\uc791 \uc2dc\uac01 \uace0\uc815 (\ubd84/\ucd08 \uc81c\uac70)
+    collected_at = datetime.now().replace(minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:00:00")
+
     if dep_date is not None:
         dep_dates = [dep_date]
-        log.info("=== 수집 시작 (단일 날짜): %s ===", dep_date.isoformat())
+        log.info("=== \uc218\uc9d1 \uc2dc\uc791 (\ub2e8\uc77c \ub0a0\uc9dc): %s ===", dep_date.isoformat())
     else:
         dep_dates = [
             today + timedelta(days=dpd)
             for dpd in range(DPD_MIN, DPD_MAX + 1)
         ]
-        log.info("=== 수집 시작: %s ===", today.isoformat())
-        log.info("DPD 범위: %s~%s  (%s일)", DPD_MIN, DPD_MAX, len(dep_dates))
+        log.info("=== \uc218\uc9d1 \uc2dc\uc791: %s ===", today.isoformat())
+        log.info("DPD \ubc94\uc704: %s~%s  (%s\uc77c)", DPD_MIN, DPD_MAX, len(dep_dates))
 
     output_dir = settings.raw_google_flights_dir / today.isoformat()
 
-    log.info("편도 노선: %s", [f"{o}→{d}" for o, d in ONEWAY_ROUTES])
-    log.info("왕복 노선: %s", [f"{o}↔{d}" for o, d in ROUNDTRIP_ROUTES])
-    log.info("출력 경로: %s", output_dir)
-    log.info("로그 파일: %s", _log_file)
-    log.info("DPD 병렬 수: %s", DPD_PARALLEL)
+    log.info("\uc218\uc9d1 \uae30\uc900 \uc2dc\uac01: %s", collected_at)
+    log.info("\ud3b8\ub3c4 \ub178\uc120: %s", [f"{o}\u2192{d}" for o, d in ONEWAY_ROUTES])
+    log.info("\uc655\ubcf5 \ub178\uc120: %s", [f"{o}\u2194{d}" for o, d in ROUNDTRIP_ROUTES])
+    log.info("\ucd9c\ub825 \uacbd\ub85c: %s", output_dir)
+    log.info("\ub85c\uadf8 \ud30c\uc77c: %s", _log_file)
+    log.info("DPD \ubcd1\ub82c \uc218: %s", DPD_PARALLEL)
 
     sem = asyncio.Semaphore(DPD_PARALLEL)
 
@@ -422,10 +426,10 @@ async def run_collection(dep_date: Optional[date] = None) -> None:
         )
         try:
             await asyncio.gather(*[
-                collect_date(browser, d, sem)
+                collect_date(browser, d, sem, collected_at)
                 for d in dep_dates
             ])
         finally:
             await browser.close()
 
-    log.info("=== 수집 완료: %s ===", today.isoformat())
+    log.info("=== \uc218\uc9d1 \uc644\ub8cc: %s ===", today.isoformat())
