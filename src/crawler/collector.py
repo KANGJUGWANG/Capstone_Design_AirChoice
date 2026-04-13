@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import date, timedelta
+from typing import Optional
 
 from playwright.async_api import Browser, Page, async_playwright
 
@@ -386,17 +387,26 @@ async def collect_date(
         )
 
 
-async def run_collection() -> None:
+async def run_collection(dep_date: Optional[date] = None) -> None:
+    """
+    dep_date 지정 시: 해당 날짜 1개만 수집 (테스트용)
+    dep_date 미지정 시: DPD 1~120 전체 수집 (운영 기본 동작)
+    """
     today = date.today()
-    dep_dates = [
-        today + timedelta(days=dpd)
-        for dpd in range(DPD_MIN, DPD_MAX + 1)
-    ]
+
+    if dep_date is not None:
+        dep_dates = [dep_date]
+        log.info("=== 수집 시작 (단일 날짜): %s ===", dep_date.isoformat())
+    else:
+        dep_dates = [
+            today + timedelta(days=dpd)
+            for dpd in range(DPD_MIN, DPD_MAX + 1)
+        ]
+        log.info("=== 수집 시작: %s ===", today.isoformat())
+        log.info("DPD 범위: %s~%s  (%s일)", DPD_MIN, DPD_MAX, len(dep_dates))
 
     output_dir = settings.raw_google_flights_dir / today.isoformat()
 
-    log.info("=== 수집 시작: %s ===", today.isoformat())
-    log.info("DPD 범위: %s~%s  (%s일)", DPD_MIN, DPD_MAX, len(dep_dates))
     log.info("편도 노선: %s", [f"{o}→{d}" for o, d in ONEWAY_ROUTES])
     log.info("왕복 노선: %s", [f"{o}↔{d}" for o, d in ROUNDTRIP_ROUTES])
     log.info("출력 경로: %s", output_dir)
@@ -412,8 +422,8 @@ async def run_collection() -> None:
         )
         try:
             await asyncio.gather(*[
-                collect_date(browser, dep_date, sem)
-                for dep_date in dep_dates
+                collect_date(browser, d, sem)
+                for d in dep_dates
             ])
         finally:
             await browser.close()
