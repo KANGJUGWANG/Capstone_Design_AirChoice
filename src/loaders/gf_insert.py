@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pymysql
@@ -227,6 +227,8 @@ def insert_roundtrip_offer(cur, observation_id: int, combo: dict, card_idx: int)
 
 # ------------------------------------------------------------------
 # capture_file_log INSERT
+# response_json_path: 파싱 결과 JSON 경로 (파싱 결과 = 요약본으로 취급)
+# request_json_path / summary_json_path 컬럼은 DB에서 제거됨
 # ------------------------------------------------------------------
 def insert_capture_log(
     cur,
@@ -239,14 +241,12 @@ def insert_capture_log(
         INSERT INTO capture_file_log
             (observation_id, offer_observation_id,
              captured_at, capture_type,
-             request_url, request_json_path,
-             response_json_path, summary_json_path,
+             request_url, response_json_path,
              parser_version)
         VALUES
             (%(observation_id)s, %(offer_observation_id)s,
              %(captured_at)s, %(capture_type)s,
-             %(request_url)s, %(request_json_path)s,
-             %(response_json_path)s, %(summary_json_path)s,
+             %(request_url)s, %(response_json_path)s,
              %(parser_version)s)
     """
 
@@ -256,11 +256,7 @@ def insert_capture_log(
         "captured_at":          datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "capture_type":         "getbookingresults",
         "request_url":          search_url,
-        # 현재 구조에서는 raw 파일을 별도 저장하지 않으므로
-        # 파싱된 JSON 파일 경로를 공통으로 기록
-        "request_json_path":    str(file_path),
         "response_json_path":   str(file_path),
-        "summary_json_path":    str(file_path),
         "parser_version":       PARSER_VERSION,
     }
 
@@ -343,9 +339,10 @@ def resolve_target_files(args) -> list[Path]:
             file_path = settings.project_root / file_path
         return [file_path]
 
-    collect_dir = settings.raw_google_flights_dir / args.date
+    target_date = args.date or date.today().isoformat()
+    collect_dir = settings.raw_google_flights_dir / target_date
     files = sorted(collect_dir.glob("*.json"))
-    log.info("대상 파일: %s개  (%s)", len(files), collect_dir)
+    log.info("대상 날짜: %s  파일: %s개  (%s)", target_date, len(files), collect_dir)
     return files
 
 
@@ -353,10 +350,17 @@ def resolve_target_files(args) -> list[Path]:
 # 메인
 # ------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--date", help="수집일 (예: 2026-04-12) — 해당 날짜 폴더 전체 처리")
-    group.add_argument("--file", help="단일 JSON 파일 경로")
+    parser = argparse.ArgumentParser(description="Google Flights INSERT")
+    parser.add_argument(
+        "--date",
+        default=None,
+        help="수집일 (예: 2026-04-13). 생략 시 오늘 날짜 폴더 자동 처리.",
+    )
+    parser.add_argument(
+        "--file",
+        default=None,
+        help="단일 JSON 파일 경로 (테스트용).",
+    )
     args = parser.parse_args()
 
     files = resolve_target_files(args)
