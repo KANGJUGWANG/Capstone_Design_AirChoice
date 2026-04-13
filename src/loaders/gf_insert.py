@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import pymysql
@@ -19,6 +20,8 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger(__name__)
+
+PARSER_VERSION = "v1.0.0"
 
 
 # ------------------------------------------------------------------
@@ -85,17 +88,17 @@ def insert_observation(cur, data: dict) -> int:
     """
 
     params = {
-        "observed_at": normalize_observed_at(data["observed_at"]),
-        "source": "google_flights",
-        "route_type": data["route_type"],
-        "origin_iata": data["origin"],
-        "destination_iata": data["dest"],
-        "departure_date": data["dep_date"],
-        "return_date": data.get("ret_date"),
-        "stay_nights": data.get("stay_nights"),
-        "dpd": data["dpd"],
-        "search_url": data.get("search_url", ""),
-        "crawl_status": "success",
+        "observed_at":       normalize_observed_at(data["observed_at"]),
+        "source":            "google_flights",
+        "route_type":        data["route_type"],
+        "origin_iata":       data["origin"],
+        "destination_iata":  data["dest"],
+        "departure_date":    data["dep_date"],
+        "return_date":       data.get("ret_date"),
+        "stay_nights":       data.get("stay_nights"),
+        "dpd":               data["dpd"],
+        "search_url":        data.get("search_url", ""),
+        "crawl_status":      "success",
     }
 
     cur.execute(sql, params)
@@ -116,7 +119,9 @@ def insert_oneway_offer(cur, observation_id: int, card: dict) -> int:
              airline_code, airline_name,
              flight_number,
              dep_time_local, arr_time_local, duration_min,
+             stops, aircraft,
              seller_domain, selected_seller_name,
+             seller_type, airline_tag_present,
              price_krw,
              price_source, price_status, parse_status, price_selection_reason,
              ret_airline_code, ret_airline_name, ret_flight_number,
@@ -126,24 +131,30 @@ def insert_oneway_offer(cur, observation_id: int, card: dict) -> int:
              %(airline_code)s, %(airline_name)s,
              %(flight_number)s,
              %(dep_time_local)s, %(arr_time_local)s, %(duration_min)s,
+             %(stops)s, %(aircraft)s,
              %(seller_domain)s, %(selected_seller_name)s,
+             %(seller_type)s, %(airline_tag_present)s,
              %(price_krw)s,
              %(price_source)s, %(price_status)s, %(parse_status)s, %(price_selection_reason)s,
              NULL, NULL, NULL, NULL, NULL, NULL)
     """
 
     params = {
-        "observation_id": observation_id,
-        "card_index": card.get("card_index", 0),
-        "airline_code": card.get("airline_code"),
-        "airline_name": card.get("airline_name"),
-        "flight_number": dep.get("flight_no"),
-        "dep_time_local": dep.get("dep_time"),
-        "arr_time_local": dep.get("arr_time"),
-        "duration_min": dep.get("duration_min"),
-        "seller_domain": seller.get("url"),
+        "observation_id":       observation_id,
+        "card_index":           card.get("card_index", 0),
+        "airline_code":         card.get("airline_code"),
+        "airline_name":         card.get("airline_name"),
+        "flight_number":        dep.get("flight_no"),
+        "dep_time_local":       dep.get("dep_time"),
+        "arr_time_local":       dep.get("arr_time"),
+        "duration_min":         dep.get("duration_min"),
+        "stops":                card.get("stops", 0),
+        "aircraft":             dep.get("aircraft"),
+        "seller_domain":        seller.get("url"),
         "selected_seller_name": seller.get("name"),
-        "price_krw": card.get("price_krw"),
+        "seller_type":          card.get("seller_type", "unknown"),
+        "airline_tag_present":  card.get("airline_tag_present", False),
+        "price_krw":            card.get("price_krw"),
         **meta,
     }
 
@@ -164,7 +175,9 @@ def insert_roundtrip_offer(cur, observation_id: int, combo: dict, card_idx: int)
              airline_code, airline_name,
              flight_number,
              dep_time_local, arr_time_local, duration_min,
+             stops, aircraft,
              seller_domain, selected_seller_name,
+             seller_type, airline_tag_present,
              price_krw,
              price_source, price_status, parse_status, price_selection_reason,
              ret_airline_code, ret_airline_name, ret_flight_number,
@@ -174,7 +187,9 @@ def insert_roundtrip_offer(cur, observation_id: int, combo: dict, card_idx: int)
              %(airline_code)s, %(airline_name)s,
              %(flight_number)s,
              %(dep_time_local)s, %(arr_time_local)s, %(duration_min)s,
+             %(stops)s, %(aircraft)s,
              %(seller_domain)s, %(selected_seller_name)s,
+             %(seller_type)s, %(airline_tag_present)s,
              %(price_krw)s,
              %(price_source)s, %(price_status)s, %(parse_status)s, %(price_selection_reason)s,
              %(ret_airline_code)s, %(ret_airline_name)s, %(ret_flight_number)s,
@@ -182,24 +197,71 @@ def insert_roundtrip_offer(cur, observation_id: int, combo: dict, card_idx: int)
     """
 
     params = {
-        "observation_id": observation_id,
-        "card_index": card_idx,
-        "airline_code": combo.get("airline_code"),
-        "airline_name": combo.get("airline_name"),
-        "flight_number": combo.get("outbound_flight_no"),
-        "dep_time_local": combo.get("outbound_dep_time"),
-        "arr_time_local": combo.get("outbound_arr_time"),
-        "duration_min": combo.get("outbound_duration_min"),
-        "seller_domain": seller.get("url"),
+        "observation_id":       observation_id,
+        "card_index":           card_idx,
+        "airline_code":         combo.get("airline_code"),
+        "airline_name":         combo.get("airline_name"),
+        "flight_number":        combo.get("outbound_flight_no"),
+        "dep_time_local":       combo.get("outbound_dep_time"),
+        "arr_time_local":       combo.get("outbound_arr_time"),
+        "duration_min":         combo.get("outbound_duration_min"),
+        "stops":                combo.get("stops", 0),
+        "aircraft":             combo.get("aircraft"),
+        "seller_domain":        seller.get("url"),
         "selected_seller_name": seller.get("name"),
-        "price_krw": combo.get("price_krw"),
-        "ret_airline_code": combo.get("airline_code"),
-        "ret_airline_name": combo.get("airline_name"),
-        "ret_flight_number": combo.get("inbound_flight_no"),
-        "ret_dep_time_local": combo.get("inbound_dep_time"),
-        "ret_arr_time_local": combo.get("inbound_arr_time"),
-        "ret_duration_min": combo.get("inbound_duration_min"),
+        "seller_type":          combo.get("seller_type", "unknown"),
+        "airline_tag_present":  combo.get("airline_tag_present", False),
+        "price_krw":            combo.get("price_krw"),
+        "ret_airline_code":     combo.get("airline_code"),
+        "ret_airline_name":     combo.get("airline_name"),
+        "ret_flight_number":    combo.get("inbound_flight_no"),
+        "ret_dep_time_local":   combo.get("inbound_dep_time"),
+        "ret_arr_time_local":   combo.get("inbound_arr_time"),
+        "ret_duration_min":     combo.get("inbound_duration_min"),
         **meta,
+    }
+
+    cur.execute(sql, params)
+    return cur.lastrowid
+
+
+# ------------------------------------------------------------------
+# capture_file_log INSERT
+# ------------------------------------------------------------------
+def insert_capture_log(
+    cur,
+    observation_id: int,
+    offer_observation_id: int,
+    file_path: Path,
+    search_url: str,
+) -> int:
+    sql = """
+        INSERT INTO capture_file_log
+            (observation_id, offer_observation_id,
+             captured_at, capture_type,
+             request_url, request_json_path,
+             response_json_path, summary_json_path,
+             parser_version)
+        VALUES
+            (%(observation_id)s, %(offer_observation_id)s,
+             %(captured_at)s, %(capture_type)s,
+             %(request_url)s, %(request_json_path)s,
+             %(response_json_path)s, %(summary_json_path)s,
+             %(parser_version)s)
+    """
+
+    params = {
+        "observation_id":       observation_id,
+        "offer_observation_id": offer_observation_id,
+        "captured_at":          datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "capture_type":         "getbookingresults",
+        "request_url":          search_url,
+        # 현재 구조에서는 raw 파일을 별도 저장하지 않으므로
+        # 파싱된 JSON 파일 경로를 공통으로 기록
+        "request_json_path":    str(file_path),
+        "response_json_path":   str(file_path),
+        "summary_json_path":    str(file_path),
+        "parser_version":       PARSER_VERSION,
     }
 
     cur.execute(sql, params)
@@ -213,9 +275,11 @@ def process_file(path: Path, conn) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     route_type = data["route_type"]
     tag = f"{route_type} {data['origin']}→{data['dest']} {data['dep_date']}"
+    search_url = data.get("search_url", "")
 
     inserted_obs = 0
     inserted_offer = 0
+    inserted_log = 0
     skipped = 0
 
     log.info("처리 시작: %s", path)
@@ -230,30 +294,32 @@ def process_file(path: Path, conn) -> dict:
                     if not card.get("price_krw"):
                         skipped += 1
                         continue
-                    insert_oneway_offer(cur, obs_id, card)
+                    offer_id = insert_oneway_offer(cur, obs_id, card)
+                    insert_capture_log(cur, obs_id, offer_id, path, search_url)
                     inserted_offer += 1
+                    inserted_log += 1
 
             else:
                 for i, combo in enumerate(data.get("combos", [])):
                     if not combo.get("price_krw"):
                         skipped += 1
                         continue
-                    insert_roundtrip_offer(cur, obs_id, combo, i)
+                    offer_id = insert_roundtrip_offer(cur, obs_id, combo, i)
+                    insert_capture_log(cur, obs_id, offer_id, path, search_url)
                     inserted_offer += 1
+                    inserted_log += 1
 
         conn.commit()
         log.info(
-            "[%s] observation=%s  offer=%s건  skip=%s건",
-            tag,
-            obs_id,
-            inserted_offer,
-            skipped,
+            "[%s] observation=%s  offer=%s건  log=%s건  skip=%s건",
+            tag, obs_id, inserted_offer, inserted_log, skipped,
         )
         return {
             "status": "ok",
             "obs_id": obs_id,
-            "offer": inserted_offer,
-            "skip": skipped,
+            "offer":  inserted_offer,
+            "log":    inserted_log,
+            "skip":   skipped,
         }
 
     except Exception as e:
@@ -261,9 +327,9 @@ def process_file(path: Path, conn) -> dict:
         log.error("[%s] INSERT 실패: %s", tag, e)
         return {
             "status": "error",
-            "error": str(e),
-            "obs": inserted_obs,
-            "offer": inserted_offer,
+            "error":  str(e),
+            "obs":    inserted_obs,
+            "offer":  inserted_offer,
         }
 
 
@@ -315,9 +381,7 @@ def main():
 
     log.info(
         "완료  성공=%s  실패=%s  총 offer=%s건",
-        total["ok"],
-        total["error"],
-        total["offer"],
+        total["ok"], total["error"], total["offer"],
     )
 
 
