@@ -79,7 +79,8 @@ def _query_int(sql: str, default: int = 0) -> int:
 
 def _send(embed: dict) -> bool:
     """
-    content: "" 는 포럼 채널 호환을 위해 필수
+    content: "" 는 포럼 채널 호환을 위해 필수.
+    User-Agent: Cloudflare가 Python-urllib를 차단하는 케이스 방지.
     """
     if not WEBHOOK_URL:
         print("[webhook] DISCORD_WEBHOOK_URL 미설정 — skip", file=sys.stderr)
@@ -89,7 +90,10 @@ def _send(embed: dict) -> bool:
         data = json.dumps(payload).encode("utf-8")
         req = Request(
             WEBHOOK_URL, data=data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0",
+            },
             method="POST",
         )
         with urlopen(req, timeout=10) as resp:
