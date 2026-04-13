@@ -53,7 +53,7 @@ async def _wait_for_response(page: Page, min_ms: int = 2_000, networkidle_timeou
     try:
         await page.wait_for_load_state("networkidle", timeout=networkidle_timeout)
     except Exception:
-        pass  # timeout 시 수집된 것만 사용
+        pass
 
 
 async def get_card_els(page: Page) -> list:
@@ -184,7 +184,6 @@ async def process_roundtrip_card(
                 pass
 
     page.on("response", capture_extra)
-    # 카드 클릭 후 추가 응답 대기: 최소 500ms + networkidle
     await _wait_for_response(page, min_ms=500, networkidle_timeout=5_000)
     page.remove_listener("response", capture_extra)
 
@@ -208,21 +207,26 @@ async def process_roundtrip_card(
 
     return [
         {
-            "outbound_flight_no": (outbound.get("dep") or {}).get("flight_no"),
-            "outbound_dep_time": (outbound.get("dep") or {}).get("dep_time"),
-            "outbound_arr_time": (outbound.get("dep") or {}).get("arr_time"),
-            "outbound_dep_date": (outbound.get("dep") or {}).get("dep_date"),
+            "outbound_flight_no":    (outbound.get("dep") or {}).get("flight_no"),
+            "outbound_dep_time":     (outbound.get("dep") or {}).get("dep_time"),
+            "outbound_arr_time":     (outbound.get("dep") or {}).get("arr_time"),
+            "outbound_dep_date":     (outbound.get("dep") or {}).get("dep_date"),
             "outbound_duration_min": (outbound.get("dep") or {}).get("duration_min"),
-            "airline_code": outbound.get("airline_code"),
-            "airline_name": outbound.get("airline_name"),
-            "inbound_flight_no": (rc.get("dep") or {}).get("flight_no"),
-            "inbound_dep_time": (rc.get("dep") or {}).get("dep_time"),
-            "inbound_arr_time": (rc.get("dep") or {}).get("arr_time"),
-            "inbound_dep_date": (rc.get("dep") or {}).get("dep_date"),
-            "inbound_duration_min": (rc.get("dep") or {}).get("duration_min"),
-            "price_krw": rc.get("price_krw"),
-            "outbound_ref_price": outbound.get("price_krw"),
-            "official_seller": rc.get("official_seller"),
+            "airline_code":          outbound.get("airline_code"),
+            "airline_name":          outbound.get("airline_name"),
+            "inbound_flight_no":     (rc.get("dep") or {}).get("flight_no"),
+            "inbound_dep_time":      (rc.get("dep") or {}).get("dep_time"),
+            "inbound_arr_time":      (rc.get("dep") or {}).get("arr_time"),
+            "inbound_dep_date":      (rc.get("dep") or {}).get("dep_date"),
+            "inbound_duration_min":  (rc.get("dep") or {}).get("duration_min"),
+            "price_krw":             rc.get("price_krw"),
+            "outbound_ref_price":    outbound.get("price_krw"),
+            "official_seller":       rc.get("official_seller"),
+            # 출발편 기준 파생 필드 패스스루
+            "stops":               outbound.get("stops", 0),
+            "aircraft":            (outbound.get("dep") or {}).get("aircraft"),
+            "airline_tag_present": outbound.get("airline_tag_present", False),
+            "seller_type":         outbound.get("seller_type", "unknown"),
         }
         for rc in same_airline
     ]
