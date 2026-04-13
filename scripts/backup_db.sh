@@ -64,11 +64,12 @@ log "임시 저장 : ${DUMP_FILE}"
 log "업로드 대상: ${RCLONE_DEST}"
 
 # ---------------------------------------------------------------------------
-# 1. mysqldump → gzip
+# 1. mysqldump → gzip (-h 127.0.0.1 으로 TCP 강제, 소켓 인증 우회)
 # ---------------------------------------------------------------------------
 log "[1/3] mysqldump 실행..."
 docker exec "${MYSQL_CONTAINER}" \
     mysqldump \
+    -h 127.0.0.1 \
     --user="${MYSQL_USER}" \
     --password="${MYSQL_PASSWORD}" \
     --single-transaction \
