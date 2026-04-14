@@ -17,6 +17,10 @@ echo "========================================"
 log "파이프라인 시작"
 echo "========================================"
 
+# 수집 시작 시각 캡체 (적재 웹훅 쿼리 기준)
+COLLECT_HOUR=$(date +%H | sed 's/^0//')
+COLLECT_DATE=$(date '+%Y-%m-%d')
+
 # ------------------------------------------------------------------
 # 1단계: 수집
 # ------------------------------------------------------------------
@@ -41,7 +45,7 @@ log "INSERT 시작"
 
 if docker exec capstone-loader python -m src.loaders.gf_insert; then
     log "INSERT 완료"
-    $WEBHOOK insert_done || true
+    $WEBHOOK insert_done --hour "$COLLECT_HOUR" --date "$COLLECT_DATE" || true
     $WEBHOOK disk_warn || true
 else
     log "INSERT 실패"
