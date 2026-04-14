@@ -42,6 +42,7 @@ log "INSERT 시작"
 if docker exec capstone-loader python -m src.loaders.gf_insert; then
     log "INSERT 완료"
     $WEBHOOK insert_done || true
+    $WEBHOOK disk_warn || true
 else
     log "INSERT 실패"
     $WEBHOOK pipeline_fail --stage "loader" --error "gf_insert 비정상 종료" || true

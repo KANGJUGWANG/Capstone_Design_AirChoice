@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """
 src/utils/webhook.py
-역할: Discord 웹훅 알림 전송 (수집 완료 / 적재 완료 / 실패 / 백업 완료)
+역할: Discord 웹훅 알림 전송 (수집 완료 / 적재 완료 / 실패 / 백업 완료 / 디스크 경고)
 실행: python3 /srv/Capstone/src/utils/webhook.py <event> [options]
 이벤트:
   collect_done  --elapsed <분>
   insert_done
   pipeline_fail --stage <collector|loader> --error <message>
   backup_done   --size <크기> --file <파일명>
+  disk_warn
 """
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from datetime import date, datetime
@@ -22,6 +24,8 @@ from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path("/srv/Capstone")
 ENV_FILE = PROJECT_ROOT / ".env"
+
+DISK_WARN_THRESHOLD = 80
 
 
 def _load_env() -> dict:
@@ -46,6 +50,31 @@ MYSQL_PASSWORD  = _ENV.get("MYSQL_ROOT_PASSWORD", "")
 RAW_DIR         = PROJECT_ROOT / "data" / "raw" / "google_flights"
 
 
+# ---------------------------------------------------------------------------
+# 디스크 상태
+# ---------------------------------------------------------------------------
+def _get_disk_info() -> dict:
+    """
+    반환: {
+        used_gb: float, total_gb: float, free_gb: float, percent: float,
+        display: str  # 예: "28.4 GB 사용 / 200 GB · 잔여 171.6 GB (85.8%)"
+    }
+    """
+    try:
+        usage = shutil.disk_usage("/")
+        total_gb = usage.total / 1024 ** 3
+        used_gb  = usage.used  / 1024 ** 3
+        free_gb  = usage.free  / 1024 ** 3
+        percent  = used_gb / total_gb * 100
+        display  = f"{used_gb:.1f} GB 사용 / {total_gb:.0f} GB · 잔여 {free_gb:.1f} GB ({percent:.1f}%)"
+        return {"used_gb": used_gb, "total_gb": total_gb, "free_gb": free_gb, "percent": percent, "display": display}
+    except Exception:
+        return {"used_gb": 0, "total_gb": 0, "free_gb": 0, "percent": 0, "display": "조회 실패"}
+
+
+# ---------------------------------------------------------------------------
+# DB 조회
+# ---------------------------------------------------------------------------
 def _query(sql: str) -> str:
     if not MYSQL_PASSWORD:
         return ""
@@ -77,11 +106,10 @@ def _query_int(sql: str, default: int = 0) -> int:
         return default
 
 
+# ---------------------------------------------------------------------------
+# 웹훅 전송
+# ---------------------------------------------------------------------------
 def _send(embed: dict) -> bool:
-    """
-    content: "" 는 포럼 채널 호환을 위해 필수.
-    User-Agent: Cloudflare가 Python-urllib를 차단하는 케이스 방지.
-    """
     if not WEBHOOK_URL:
         print("[webhook] DISCORD_WEBHOOK_URL 미설정 — skip", file=sys.stderr)
         return False
@@ -115,6 +143,9 @@ def _hour_label() -> str:
     return f"{datetime.now().hour:02d}:00"
 
 
+# ---------------------------------------------------------------------------
+# 이벤트별 페이로드
+# ---------------------------------------------------------------------------
 def collect_done(elapsed_min: int) -> None:
     today = _today()
     collect_dir = RAW_DIR / today
@@ -211,6 +242,8 @@ def insert_done() -> None:
         sign = "+" if delta >= 0 else ""
         delta_str = f"전회차 대비 {sign}{delta:,}건"
 
+    disk = _get_disk_info()
+
     _send({
         "title": f"적재 완료 — {today} {_hour_label()}",
         "color": 0x5865F2,
@@ -219,6 +252,7 @@ def insert_done() -> None:
             {"name": "가격 상태 분포", "value": status_lines, "inline": False},
             {"name": "ICN→NRT 가격 범위 (편도)", "value": price_str, "inline": False},
             {"name": "DB 누적", "value": f"search: {total_obs:,}건 / offer: {total_offer:,}건", "inline": False},
+            {"name": "디스크", "value": disk["display"], "inline": False},
         ],
         "footer": {"text": f"AirChoice · {_now_str()}{' · ' + delta_str if delta_str else ''}"},
     })
@@ -255,6 +289,26 @@ def backup_done(size: str, filename: str) -> None:
     })
 
 
+def disk_warn() -> None:
+    """
+    디스크 사용률이 DISK_WARN_THRESHOLD(80%) 이상일 때만 전송.
+    run_pipeline.sh 에서 INSERT 완료 후 매회 실행.
+    """
+    disk = _get_disk_info()
+    if disk["percent"] < DISK_WARN_THRESHOLD:
+        return
+
+    _send({
+        "title": f"⚠️ 디스크 경고 — {disk['percent']:.1f}% 사용 중",
+        "color": 0xED4245,
+        "fields": [
+            {"name": "사용량", "value": disk["display"], "inline": False},
+            {"name": "조치 필요", "value": "`/srv/Capstone/data/raw/` JSON 정리 또는 로그 확인", "inline": False},
+        ],
+        "footer": {"text": f"AirChoice · {_now_str()}"},
+    })
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="AirChoice Discord 웹훅 알림")
     sub = parser.add_subparsers(dest="event")
@@ -268,6 +322,7 @@ def main() -> None:
     p_backup = sub.add_parser("backup_done")
     p_backup.add_argument("--size", default="?")
     p_backup.add_argument("--file", default="?")
+    sub.add_parser("disk_warn")
 
     args = parser.parse_args()
 
@@ -279,6 +334,8 @@ def main() -> None:
         pipeline_fail(args.stage, args.error)
     elif args.event == "backup_done":
         backup_done(args.size, args.file)
+    elif args.event == "disk_warn":
+        disk_warn()
     else:
         parser.print_help()
 
