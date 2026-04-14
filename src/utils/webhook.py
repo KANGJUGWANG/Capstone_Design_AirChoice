@@ -5,7 +5,7 @@ src/utils/webhook.py
 실행: python3 /srv/Capstone/src/utils/webhook.py <event> [options]
 이벤트:
   collect_done  --elapsed <분>
-  insert_done
+  insert_done   --hour <수집시작시(0~23)> --date <YYYY-MM-DD>
   pipeline_fail --stage <collector|loader> --error <message>
   backup_done   --size <크기> --file <파일명>
   disk_warn
@@ -50,16 +50,7 @@ MYSQL_PASSWORD  = _ENV.get("MYSQL_ROOT_PASSWORD", "")
 RAW_DIR         = PROJECT_ROOT / "data" / "raw" / "google_flights"
 
 
-# ---------------------------------------------------------------------------
-# 디스크 상태
-# ---------------------------------------------------------------------------
 def _get_disk_info() -> dict:
-    """
-    반환: {
-        used_gb: float, total_gb: float, free_gb: float, percent: float,
-        display: str  # 예: "28.4 GB 사용 / 200 GB · 잔여 171.6 GB (85.8%)"
-    }
-    """
     try:
         usage = shutil.disk_usage("/")
         total_gb = usage.total / 1024 ** 3
@@ -72,9 +63,6 @@ def _get_disk_info() -> dict:
         return {"used_gb": 0, "total_gb": 0, "free_gb": 0, "percent": 0, "display": "조회 실패"}
 
 
-# ---------------------------------------------------------------------------
-# DB 조회
-# ---------------------------------------------------------------------------
 def _query(sql: str) -> str:
     if not MYSQL_PASSWORD:
         return ""
@@ -106,9 +94,6 @@ def _query_int(sql: str, default: int = 0) -> int:
         return default
 
 
-# ---------------------------------------------------------------------------
-# 웹훅 전송
-# ---------------------------------------------------------------------------
 def _send(embed: dict) -> bool:
     if not WEBHOOK_URL:
         print("[webhook] DISCORD_WEBHOOK_URL 미설정 — skip", file=sys.stderr)
@@ -139,13 +124,10 @@ def _today() -> str:
     return date.today().isoformat()
 
 
-def _hour_label() -> str:
-    return f"{datetime.now().hour:02d}:00"
+def _hour_label(hour: int) -> str:
+    return f"{hour:02d}:00"
 
 
-# ---------------------------------------------------------------------------
-# 이벤트별 페이로드
-# ---------------------------------------------------------------------------
 def collect_done(elapsed_min: int) -> None:
     today = _today()
     collect_dir = RAW_DIR / today
@@ -172,8 +154,9 @@ def collect_done(elapsed_min: int) -> None:
         f"`{route}`: {cnt:,}건" for route, cnt in sorted(route_counts.items())
     ) or "집계 없음"
 
+    collect_hour = datetime.now().hour
     _send({
-        "title": f"수집 완료 — {today} {_hour_label()}",
+        "title": f"수집 완료 — {today} {_hour_label(collect_hour)}",
         "color": 0x57F287,
         "fields": [
             {"name": "소요 시간", "value": elapsed_str, "inline": True},
@@ -184,25 +167,27 @@ def collect_done(elapsed_min: int) -> None:
     })
 
 
-def insert_done() -> None:
-    today = _today()
-    hour = datetime.now().hour
-
+def insert_done(collect_hour: int, collect_date: str) -> None:
+    """
+    collect_hour: 수집 시작 시각 (run_pipeline.sh에서 수집 시작 시점에 캡쳐한 값)
+    collect_date: 수집 날짜 (YYYY-MM-DD)
+    두 값으로 DB 쿼리 수행 → INSERT 시각과 무관하게 정확한 회차 데이터 조회 보장
+    """
     obs_count = _query_int(f"""
         SELECT COUNT(*) FROM search_observation
-        WHERE DATE(observed_at) = '{today}' AND HOUR(observed_at) = {hour}
+        WHERE DATE(observed_at) = '{collect_date}' AND HOUR(observed_at) = {collect_hour}
     """)
     offer_count = _query_int(f"""
         SELECT COUNT(f.offer_observation_id)
         FROM flight_offer_observation f
         JOIN search_observation s ON f.observation_id = s.observation_id
-        WHERE DATE(s.observed_at) = '{today}' AND HOUR(s.observed_at) = {hour}
+        WHERE DATE(s.observed_at) = '{collect_date}' AND HOUR(s.observed_at) = {collect_hour}
     """)
     status_rows = _query_rows(f"""
         SELECT f.price_status, COUNT(*) as cnt
         FROM flight_offer_observation f
         JOIN search_observation s ON f.observation_id = s.observation_id
-        WHERE DATE(s.observed_at) = '{today}' AND HOUR(s.observed_at) = {hour}
+        WHERE DATE(s.observed_at) = '{collect_date}' AND HOUR(s.observed_at) = {collect_hour}
         GROUP BY f.price_status
     """)
     status_lines = "\n".join(
@@ -216,7 +201,7 @@ def insert_done() -> None:
         JOIN search_observation s ON f.observation_id = s.observation_id
         WHERE s.route_type = 'oneway' AND s.origin_iata = 'ICN'
         AND s.destination_iata = 'NRT'
-        AND DATE(s.observed_at) = '{today}' AND HOUR(s.observed_at) = {hour}
+        AND DATE(s.observed_at) = '{collect_date}' AND HOUR(s.observed_at) = {collect_hour}
         AND f.price_krw IS NOT NULL
     """)
     price_str = "없음"
@@ -233,8 +218,8 @@ def insert_done() -> None:
         SELECT COUNT(f.offer_observation_id)
         FROM flight_offer_observation f
         JOIN search_observation s ON f.observation_id = s.observation_id
-        WHERE DATE(s.observed_at) = DATE_SUB('{today}', INTERVAL 1 DAY)
-        AND HOUR(s.observed_at) = {hour}
+        WHERE DATE(s.observed_at) = DATE_SUB('{collect_date}', INTERVAL 1 DAY)
+        AND HOUR(s.observed_at) = {collect_hour}
     """)
     delta_str = ""
     if yesterday_offer > 0:
@@ -245,7 +230,7 @@ def insert_done() -> None:
     disk = _get_disk_info()
 
     _send({
-        "title": f"적재 완료 — {today} {_hour_label()}",
+        "title": f"적재 완료 — {collect_date} {_hour_label(collect_hour)}",
         "color": 0x5865F2,
         "fields": [
             {"name": "이번 적재", "value": f"search: {obs_count:,}건 / offer: {offer_count:,}건", "inline": False},
@@ -290,14 +275,9 @@ def backup_done(size: str, filename: str) -> None:
 
 
 def disk_warn() -> None:
-    """
-    디스크 사용률이 DISK_WARN_THRESHOLD(80%) 이상일 때만 전송.
-    run_pipeline.sh 에서 INSERT 완료 후 매회 실행.
-    """
     disk = _get_disk_info()
     if disk["percent"] < DISK_WARN_THRESHOLD:
         return
-
     _send({
         "title": f"⚠️ 디스크 경고 — {disk['percent']:.1f}% 사용 중",
         "color": 0xED4245,
@@ -315,13 +295,19 @@ def main() -> None:
 
     p_collect = sub.add_parser("collect_done")
     p_collect.add_argument("--elapsed", type=int, default=0)
-    sub.add_parser("insert_done")
+
+    p_insert = sub.add_parser("insert_done")
+    p_insert.add_argument("--hour", type=int, default=datetime.now().hour)
+    p_insert.add_argument("--date", type=str, default=date.today().isoformat())
+
     p_fail = sub.add_parser("pipeline_fail")
     p_fail.add_argument("--stage", default="unknown")
     p_fail.add_argument("--error", default="비정상 종료")
+
     p_backup = sub.add_parser("backup_done")
     p_backup.add_argument("--size", default="?")
     p_backup.add_argument("--file", default="?")
+
     sub.add_parser("disk_warn")
 
     args = parser.parse_args()
@@ -329,7 +315,7 @@ def main() -> None:
     if args.event == "collect_done":
         collect_done(args.elapsed)
     elif args.event == "insert_done":
-        insert_done()
+        insert_done(args.hour, args.date)
     elif args.event == "pipeline_fail":
         pipeline_fail(args.stage, args.error)
     elif args.event == "backup_done":
