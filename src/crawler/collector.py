@@ -43,13 +43,6 @@ log = logging.getLogger(__name__)
 
 
 async def _wait_for_response(page: Page, min_ms: int = 2_000, networkidle_timeout: int = 10_000) -> None:
-    """
-    최소 대기 후 networkidle 동적 대기.
-
-    병렬 수집 시 networkidle만 사용하면 다른 컨텍스트의 네트워크 상태가
-    조용해지는 시점에 premature trigger가 발생할 수 있음.
-    최소 대기(min_ms)로 인터셉트 대상 응답을 먼저 확보한 뒤 networkidle 적용.
-    """
     await page.wait_for_timeout(min_ms)
     try:
         await page.wait_for_load_state("networkidle", timeout=networkidle_timeout)
@@ -310,12 +303,12 @@ async def collect_date(
     dep_date: date,
     sem: asyncio.Semaphore,
     collected_at: str,
+    output_dir: "Path",
 ) -> None:
     async with sem:
         ret_date = dep_date + timedelta(days=STAY_NIGHTS)
         dpd = (dep_date - date.today()).days
 
-        output_dir = settings.raw_google_flights_dir / date.today().isoformat()
         output_dir.mkdir(parents=True, exist_ok=True)
 
         oneway_results = await asyncio.gather(*[
@@ -389,13 +382,22 @@ async def run_collection(dep_date: Optional[date] = None) -> None:
     dep_date \ubbf8\uc9c0\uc815 \uc2dc: DPD 1~120 \uc804\uccb4 \uc218\uc9d1 (\uc6b4\uc601 \uae30\ubcf8 \ub3d9\uc791)
 
     collected_at: \uc2e4\ud589 \uc2dc\uc791 \uc2dc\uac01 (\uc2dc\uac04\uae4c\uc9c0\ub9cc, \ubd84/\ucd08=00)
-    \uc608: 2026-04-13 08:00:00
-    \ud558\ub8e8 3\ud68c \uc218\uc9d1(08\uc2dc, 16\uc2dc, 00\uc2dc) \ud68c\ucc28 \uad6c\ubd84 \uae30\uc900
+    \uc608: 2026-04-16 00:00:00
+
+    \uc800\uc7a5 \uacbd\ub85c: data/raw/google_flights/YYYY-MM-DD/HH00/
+    \uc608: data/raw/google_flights/2026-04-16/0000/
+         data/raw/google_flights/2026-04-16/0800/
+         data/raw/google_flights/2026-04-16/1600/
     """
     today = date.today()
 
     # \uc218\uc9d1 \uc2dc\uc791 \uc2dc\uac01 \uace0\uc815 (\ubd84/\ucd08 \uc81c\uac70)
-    collected_at = datetime.now().replace(minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:00:00")
+    now = datetime.now().replace(minute=0, second=0, microsecond=0)
+    collected_at = now.strftime("%Y-%m-%d %H:00:00")
+
+    # \uc800\uc7a5 \uacbd\ub85c: YYYY-MM-DD/HH00/ \uad6c\uc870\ub85c \ud68c\ucc28 \uad6c\ubd84
+    hour_str = now.strftime("%H") + "00"  # "0000", "0800", "1600"
+    output_dir = settings.raw_google_flights_dir / today.isoformat() / hour_str
 
     if dep_date is not None:
         dep_dates = [dep_date]
@@ -408,13 +410,10 @@ async def run_collection(dep_date: Optional[date] = None) -> None:
         log.info("=== \uc218\uc9d1 \uc2dc\uc791: %s ===", today.isoformat())
         log.info("DPD \ubc94\uc704: %s~%s  (%s\uc77c)", DPD_MIN, DPD_MAX, len(dep_dates))
 
-    output_dir = settings.raw_google_flights_dir / today.isoformat()
-
     log.info("\uc218\uc9d1 \uae30\uc900 \uc2dc\uac01: %s", collected_at)
+    log.info("\uc800\uc7a5 \uacbd\ub85c: %s", output_dir)
     log.info("\ud3b8\ub3c4 \ub178\uc120: %s", [f"{o}\u2192{d}" for o, d in ONEWAY_ROUTES])
     log.info("\uc655\ubcf5 \ub178\uc120: %s", [f"{o}\u2194{d}" for o, d in ROUNDTRIP_ROUTES])
-    log.info("\ucd9c\ub825 \uacbd\ub85c: %s", output_dir)
-    log.info("\ub85c\uadf8 \ud30c\uc77c: %s", _log_file)
     log.info("DPD \ubcd1\ub82c \uc218: %s", DPD_PARALLEL)
 
     sem = asyncio.Semaphore(DPD_PARALLEL)
@@ -426,7 +425,7 @@ async def run_collection(dep_date: Optional[date] = None) -> None:
         )
         try:
             await asyncio.gather(*[
-                collect_date(browser, d, sem, collected_at)
+                collect_date(browser, d, sem, collected_at, output_dir)
                 for d in dep_dates
             ])
         finally:

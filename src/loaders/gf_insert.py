@@ -12,7 +12,7 @@ import pymysql.cursors
 from src.config import settings
 
 # ------------------------------------------------------------------
-# 로그 설정
+# \ub85c\uadf8 \uc124\uc815
 # ------------------------------------------------------------------
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -25,7 +25,7 @@ PARSER_VERSION = "v1.0.0"
 
 
 # ------------------------------------------------------------------
-# DB 연결
+# DB \uc5f0\uacb0
 # ------------------------------------------------------------------
 def get_conn():
     return pymysql.connect(
@@ -41,7 +41,7 @@ def get_conn():
 
 
 # ------------------------------------------------------------------
-# 가격 판정 코드 생성
+# \uac00\uaca9 \ud310\uc815 \ucf54\ub4dc \uc0dd\uc131
 # ------------------------------------------------------------------
 def make_price_meta(route_type: str, has_seller: bool) -> dict:
     if route_type == "oneway":
@@ -61,7 +61,7 @@ def make_price_meta(route_type: str, has_seller: bool) -> dict:
 
 
 # ------------------------------------------------------------------
-# observed_at 정규화
+# observed_at \uc815\uaddc\ud654
 # ------------------------------------------------------------------
 def normalize_observed_at(value: str) -> str:
     value = value.strip()
@@ -72,8 +72,8 @@ def normalize_observed_at(value: str) -> str:
 
 # ------------------------------------------------------------------
 # search_observation INSERT IGNORE
-# raw_file_path UNIQUE 키 기준으로 중복 방지
-# 반환값: observation_id (중복 시 0)
+# raw_file_path UNIQUE \ud0a4 \uae30\uc900\uc73c\ub85c \uc911\ubcf5 \ubc29\uc9c0
+# \ubc18\ud658\uac12: observation_id (\uc911\ubcf5 \uc2dc 0)
 # ------------------------------------------------------------------
 def insert_observation(cur, data: dict, raw_file_path: str) -> int:
     sql = """
@@ -105,12 +105,11 @@ def insert_observation(cur, data: dict, raw_file_path: str) -> int:
     }
 
     cur.execute(sql, params)
-    # INSERT IGNORE: 중복 시 lastrowid = 0
     return cur.lastrowid
 
 
 # ------------------------------------------------------------------
-# flight_offer_observation INSERT — 편도
+# flight_offer_observation INSERT \u2014 \ud3b8\ub3c4
 # ------------------------------------------------------------------
 def insert_oneway_offer(cur, observation_id: int, card: dict) -> int:
     dep = card.get("dep") or {}
@@ -167,7 +166,7 @@ def insert_oneway_offer(cur, observation_id: int, card: dict) -> int:
 
 
 # ------------------------------------------------------------------
-# flight_offer_observation INSERT — 왕복
+# flight_offer_observation INSERT \u2014 \uc655\ubcf5
 # ------------------------------------------------------------------
 def insert_roundtrip_offer(cur, observation_id: int, combo: dict, card_idx: int) -> int:
     seller = combo.get("official_seller") or {}
@@ -231,7 +230,6 @@ def insert_roundtrip_offer(cur, observation_id: int, combo: dict, card_idx: int)
 
 # ------------------------------------------------------------------
 # capture_file_log INSERT
-# response_json_path: 파싱 결과 JSON 경로
 # ------------------------------------------------------------------
 def insert_capture_log(
     cur,
@@ -268,7 +266,7 @@ def insert_capture_log(
 
 
 # ------------------------------------------------------------------
-# 파일 1개 처리
+# \ud30c\uc77c 1\uac1c \ucc98\ub9ac
 # ------------------------------------------------------------------
 def process_file(path: Path, conn) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -282,15 +280,14 @@ def process_file(path: Path, conn) -> dict:
     inserted_log = 0
     skipped = 0
 
-    log.info("처리 시작: %s", path)
+    log.info("\ucc98\ub9ac \uc2dc\uc791: %s", path)
 
     try:
         with conn.cursor() as cur:
             obs_id = insert_observation(cur, data, raw_file_path)
 
-            # obs_id == 0: INSERT IGNORE로 중복 감지 → offer/log 전체 skip
             if obs_id == 0:
-                log.info("[%s] 중복 파일 감지 — skip", tag)
+                log.info("[%s] \uc911\ubcf5 \ud30c\uc77c \uac10\uc9c0 \u2014 skip", tag)
                 conn.commit()
                 return {"status": "skip", "obs_id": 0, "offer": 0, "log": 0, "skip": 0}
 
@@ -318,7 +315,7 @@ def process_file(path: Path, conn) -> dict:
 
         conn.commit()
         log.info(
-            "[%s] observation=%s  offer=%s건  log=%s건  skip=%s건",
+            "[%s] observation=%s  offer=%s\uac74  log=%s\uac74  skip=%s\uac74",
             tag, obs_id, inserted_offer, inserted_log, skipped,
         )
         return {
@@ -331,7 +328,7 @@ def process_file(path: Path, conn) -> dict:
 
     except Exception as e:
         conn.rollback()
-        log.error("[%s] INSERT 실패: %s", tag, e)
+        log.error("[%s] INSERT \uc2e4\ud328: %s", tag, e)
         return {
             "status": "error",
             "error":  str(e),
@@ -341,7 +338,7 @@ def process_file(path: Path, conn) -> dict:
 
 
 # ------------------------------------------------------------------
-# 대상 파일 해석
+# \ub300\uc0c1 \ud30c\uc77c \ud574\uc11d
 # ------------------------------------------------------------------
 def resolve_target_files(args) -> list[Path]:
     if args.file:
@@ -351,33 +348,49 @@ def resolve_target_files(args) -> list[Path]:
         return [file_path]
 
     target_date = args.date or date.today().isoformat()
-    collect_dir = settings.raw_google_flights_dir / target_date
-    files = sorted(collect_dir.glob("*.json"))
-    log.info("대상 날짜: %s  파일: %s개  (%s)", target_date, len(files), collect_dir)
+    base_dir = settings.raw_google_flights_dir / target_date
+
+    if args.hour is not None:
+        # \ud68c\ucc28 \uc9c0\uc815: YYYY-MM-DD/HH00/ \ud558\uc704 \ud3f4\ub354\uc5d0\uc11c \ucc3e\uc74c
+        hour_str = f"{args.hour:02d}00"
+        collect_dir = base_dir / hour_str
+        files = sorted(collect_dir.glob("*.json"))
+        log.info("\ub300\uc0c1: %s/%s  \ud30c\uc77c: %s\uac1c", target_date, hour_str, len(files))
+    else:
+        # \uc2dc\uac04 \ubbf8\uc9c0\uc815: \ud558\uc704 \ud3f4\ub354 \uc804\uccb4 \ud0d0\uc0c9
+        files = sorted(base_dir.glob("*/*.json"))
+        log.info("\ub300\uc0c1: %s \uc804\uccb4  \ud30c\uc77c: %s\uac1c", target_date, len(files))
+
     return files
 
 
 # ------------------------------------------------------------------
-# 메인
+# \uba54\uc778
 # ------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Google Flights INSERT")
     parser.add_argument(
         "--date",
         default=None,
-        help="수집일 (예: 2026-04-13). 생략 시 오늘 날짜 폴더 자동 처리.",
+        help="\uc218\uc9d1\uc77c (\uc608: 2026-04-16). \uc0dd\ub7b5 \uc2dc \uc624\ub298 \ub0a0\uc9dc \uc790\ub3d9 \ucc98\ub9ac.",
+    )
+    parser.add_argument(
+        "--hour",
+        type=int,
+        default=None,
+        help="\uc218\uc9d1 \uc2dc\uc791 \uc2dc\uac01 (0/8/16). \uc0dd\ub7b5 \uc2dc \ud574\ub2f9 \ub0a0\uc9dc \uc804\uccb4 \uc2dc\uac04 \ubaa8\ub450 \ucc98\ub9ac.",
     )
     parser.add_argument(
         "--file",
         default=None,
-        help="단일 JSON 파일 경로 (테스트용).",
+        help="\ub2e8\uc77c JSON \ud30c\uc77c \uacbd\ub85c (\ud14c\uc2a4\ud2b8\uc6a9).",
     )
     args = parser.parse_args()
 
     files = resolve_target_files(args)
 
     if not files:
-        log.warning("처리할 파일 없음")
+        log.warning("\ucc98\ub9ac\ud560 \ud30c\uc77c \uc5c6\uc74c")
         return
 
     conn = get_conn()
@@ -397,7 +410,7 @@ def main():
         conn.close()
 
     log.info(
-        "완료  성공=%s  중복skip=%s  실패=%s  총 offer=%s건",
+        "\uc644\ub8cc  \uc131\uacf5=%s  \uc911\ubcf5skip=%s  \uc2e4\ud328=%s  \uc785\ub825 offer=%s\uac74",
         total["ok"], total["skip"], total["error"], total["offer"],
     )
 
