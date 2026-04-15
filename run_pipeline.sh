@@ -1,7 +1,7 @@
 #!/bin/bash
 # run_pipeline.sh
-# 수집 → INSERT 순차 실행 파이프라인
-# systemd timer 기준: airchoice-pipeline.timer (00:00 / 08:00 / 16:00 KST)
+# collect -> INSERT pipeline
+# systemd timer: airchoice-pipeline.timer (00:00 / 08:00 / 16:00 KST)
 
 set -euo pipefail
 
@@ -14,46 +14,45 @@ log() {
 }
 
 echo "========================================"
-log "파이프라인 시작"
+log "pipeline start"
 echo "========================================"
 
-# 수집 시작 시각 캡체
-# date +%-H : 0~23 정수. sed 미사용 — 00 → '' 버그 방지
+# capture collect start time (date +%-H: 0~23 integer, no leading zero)
 COLLECT_HOUR=$(date +%-H)
 COLLECT_DATE=$(date '+%Y-%m-%d')
 
 # ------------------------------------------------------------------
-# 1단계: 수집
+# step 1: collect
 # ------------------------------------------------------------------
-log "수집 시작"
+log "collect start"
 COLLECT_START=$(date +%s)
 
 if docker exec capstone-crawler python -m src.crawler.gf_collect; then
     COLLECT_END=$(date +%s)
     ELAPSED=$(( (COLLECT_END - COLLECT_START) / 60 ))
-    log "수집 완료 (${ELAPSED}분)"
+    log "collect done (${ELAPSED}min)"
     $WEBHOOK collect_done --elapsed "$ELAPSED" || true
 else
-    log "수집 실패"
-    $WEBHOOK pipeline_fail --stage "collector" --error "gf_collect 비정상 종료" || true
+    log "collect failed"
+    $WEBHOOK pipeline_fail --stage collector --error "gf_collect exited abnormally" || true
     exit 1
 fi
 
 # ------------------------------------------------------------------
-# 2단계: INSERT
+# step 2: INSERT
 # ------------------------------------------------------------------
-log "INSERT 시작"
+log "INSERT start"
 
 if docker exec capstone-loader python -m src.loaders.gf_insert --hour "$COLLECT_HOUR" --date "$COLLECT_DATE"; then
-    log "INSERT 완료"
+    log "INSERT done"
     $WEBHOOK insert_done --hour "$COLLECT_HOUR" --date "$COLLECT_DATE" || true
     $WEBHOOK disk_warn || true
 else
-    log "INSERT 실패"
-    $WEBHOOK pipeline_fail --stage "loader" --error "gf_insert 비정상 종료" || true
+    log "INSERT failed"
+    $WEBHOOK pipeline_fail --stage loader --error "gf_insert exited abnormally" || true
     exit 1
 fi
 
 echo "========================================"
-log "파이프라인 완료"
+log "pipeline done"
 echo "========================================"
