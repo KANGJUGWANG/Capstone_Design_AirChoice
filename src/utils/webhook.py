@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 src/utils/webhook.py
-역할: Discord 웹훅 알림 전송 (수집 완료 / 적재 완료 / 실패 / 백업 완료 / 디스크 경고)
-실행: python3 /srv/Capstone/src/utils/webhook.py <event> [options]
+역할: Discord 웹훅 알림 전송
 이벤트:
+  startup       초기 상태 스냅샷 (raw / DB / backup)
   collect_done  --elapsed <분>
-  insert_done   --hour <수집시작시(0~23)> --date <YYYY-MM-DD>
+  insert_done   --hour <0~23> --date <YYYY-MM-DD>
   pipeline_fail --stage <collector|loader> --error <message>
   backup_done   --size <크기> --file <파일명>
   disk_warn
@@ -24,7 +24,6 @@ from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path("/srv/Capstone")
 ENV_FILE = PROJECT_ROOT / ".env"
-
 DISK_WARN_THRESHOLD = 80
 
 
@@ -48,6 +47,7 @@ MYSQL_CONTAINER = "capstone-mysql"
 MYSQL_DATABASE  = _ENV.get("MYSQL_DATABASE", "capstone_db")
 MYSQL_PASSWORD  = _ENV.get("MYSQL_ROOT_PASSWORD", "")
 RAW_DIR         = PROJECT_ROOT / "data" / "raw" / "google_flights"
+BACKUP_DIR      = PROJECT_ROOT / "backups"
 
 
 def _get_disk_info() -> dict:
@@ -57,10 +57,10 @@ def _get_disk_info() -> dict:
         used_gb  = usage.used  / 1024 ** 3
         free_gb  = usage.free  / 1024 ** 3
         percent  = used_gb / total_gb * 100
-        display  = f"{used_gb:.1f} GB 사용 / {total_gb:.0f} GB · 잔여 {free_gb:.1f} GB ({percent:.1f}%)"
-        return {"used_gb": used_gb, "total_gb": total_gb, "free_gb": free_gb, "percent": percent, "display": display}
+        display  = f"{used_gb:.1f} GB / {total_gb:.0f} GB · 잔여 {free_gb:.1f} GB ({percent:.1f}%)"
+        return {"percent": percent, "display": display}
     except Exception:
-        return {"used_gb": 0, "total_gb": 0, "free_gb": 0, "percent": 0, "display": "조회 실패"}
+        return {"percent": 0, "display": "조회 실패"}
 
 
 def _query(sql: str) -> str:
@@ -128,6 +128,57 @@ def _hour_label(hour: int) -> str:
     return f"{hour:02d}:00"
 
 
+# ---------------------------------------------------------------------------
+# startup: raw / DB / backup 초기 상태 스냅샷
+# ---------------------------------------------------------------------------
+def startup() -> None:
+    # raw JSON 파일 현황
+    raw_dates = sorted(p.name for p in RAW_DIR.iterdir() if p.is_dir()) if RAW_DIR.exists() else []
+    if raw_dates:
+        raw_lines = "\n".join(
+            f"`{d}`: {sum(1 for _ in (RAW_DIR / d).rglob('*.json'))}개"
+            for d in raw_dates
+        )
+    else:
+        raw_lines = "없음 (초기화 완료)"
+
+    # DB 현황
+    total_obs   = _query_int("SELECT COUNT(*) FROM search_observation")
+    total_offer = _query_int("SELECT COUNT(*) FROM flight_offer_observation")
+    obs_rows = _query_rows(
+        "SELECT observed_at, COUNT(*) FROM search_observation "
+        "GROUP BY observed_at ORDER BY observed_at DESC LIMIT 5"
+    )
+    db_detail = "\n".join(
+        f"`{r[0]}`: {int(r[1])}건" for r in obs_rows if len(r) == 2
+    ) or "없음 (초기화 완료)"
+
+    # 백업 현황
+    backup_files = sorted(BACKUP_DIR.glob("*.sql.gz")) if BACKUP_DIR.exists() else []
+    if backup_files:
+        backup_lines = "\n".join(f"`{f.name}`" for f in backup_files[-3:])
+    else:
+        backup_lines = "없음 (초기화 완료)"
+
+    disk = _get_disk_info()
+
+    _send({
+        "title": f"수집 시작 — {_today()} {_hour_label(datetime.now().hour)}",
+        "color": 0x9B59B6,
+        "fields": [
+            {"name": "raw JSON 현황", "value": raw_lines, "inline": False},
+            {"name": "DB 누적", "value": f"search: {total_obs:,}건 / offer: {total_offer:,}건", "inline": False},
+            {"name": "최근 회차 (최대 5)", "value": db_detail, "inline": False},
+            {"name": "백업 파일 (최근 3)", "value": backup_lines, "inline": False},
+            {"name": "디스크", "value": disk["display"], "inline": False},
+        ],
+        "footer": {"text": f"AirChoice · {_now_str()}"},
+    })
+
+
+# ---------------------------------------------------------------------------
+# collect_done
+# ---------------------------------------------------------------------------
 def collect_done(elapsed_min: int) -> None:
     today = _today()
     collect_dir = RAW_DIR / today
@@ -135,17 +186,17 @@ def collect_done(elapsed_min: int) -> None:
     total_files = 0
 
     if collect_dir.exists():
-        for f in sorted(collect_dir.glob("*_oneway_*.json")):
+        for f in sorted(collect_dir.rglob("*_oneway_*.json")):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
                 parts = f.stem.split("_")
                 if len(parts) >= 4:
-                    route = f"{parts[2]}→{parts[3]}"
+                    route = f"{parts[2]}\u2192{parts[3]}"
                     route_counts[route] = route_counts.get(route, 0) + data.get("card_count", 0)
                 total_files += 1
             except Exception:
                 pass
-        total_files += sum(1 for _ in collect_dir.glob("*_roundtrip_*.json"))
+        total_files += sum(1 for _ in collect_dir.rglob("*_roundtrip_*.json"))
 
     elapsed_h = elapsed_min // 60
     elapsed_m = elapsed_min % 60
@@ -167,12 +218,10 @@ def collect_done(elapsed_min: int) -> None:
     })
 
 
+# ---------------------------------------------------------------------------
+# insert_done
+# ---------------------------------------------------------------------------
 def insert_done(collect_hour: int, collect_date: str) -> None:
-    """
-    collect_hour: 수집 시작 시각 (run_pipeline.sh에서 수집 시작 시점에 캡쳐한 값)
-    collect_date: 수집 날짜 (YYYY-MM-DD)
-    두 값으로 DB 쿼리 수행 → INSERT 시각과 무관하게 정확한 회차 데이터 조회 보장
-    """
     obs_count = _query_int(f"""
         SELECT COUNT(*) FROM search_observation
         WHERE DATE(observed_at) = '{collect_date}' AND HOUR(observed_at) = {collect_hour}
@@ -243,6 +292,9 @@ def insert_done(collect_hour: int, collect_date: str) -> None:
     })
 
 
+# ---------------------------------------------------------------------------
+# pipeline_fail
+# ---------------------------------------------------------------------------
 def pipeline_fail(stage: str, error: str) -> None:
     _send({
         "title": f"파이프라인 실패 — {stage}",
@@ -257,6 +309,9 @@ def pipeline_fail(stage: str, error: str) -> None:
     })
 
 
+# ---------------------------------------------------------------------------
+# backup_done
+# ---------------------------------------------------------------------------
 def backup_done(size: str, filename: str) -> None:
     total_obs   = _query_int("SELECT COUNT(*) FROM search_observation")
     total_offer = _query_int("SELECT COUNT(*) FROM flight_offer_observation")
@@ -274,6 +329,9 @@ def backup_done(size: str, filename: str) -> None:
     })
 
 
+# ---------------------------------------------------------------------------
+# disk_warn
+# ---------------------------------------------------------------------------
 def disk_warn() -> None:
     disk = _get_disk_info()
     if disk["percent"] < DISK_WARN_THRESHOLD:
@@ -289,9 +347,14 @@ def disk_warn() -> None:
     })
 
 
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 def main() -> None:
-    parser = argparse.ArgumentParser(description="AirChoice Discord 웹훅 알림")
+    parser = argparse.ArgumentParser(description="AirChoice Discord webhook")
     sub = parser.add_subparsers(dest="event")
+
+    sub.add_parser("startup")
 
     p_collect = sub.add_parser("collect_done")
     p_collect.add_argument("--elapsed", type=int, default=0)
@@ -312,7 +375,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if args.event == "collect_done":
+    if args.event == "startup":
+        startup()
+    elif args.event == "collect_done":
         collect_done(args.elapsed)
     elif args.event == "insert_done":
         insert_done(args.hour, args.date)
