@@ -12,12 +12,11 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 log "daily stats start"
 
-# install deps (python3 -m pip, pip3 없는 환경 대응)
-python3 -m pip install --break-system-packages --quiet \
-    matplotlib pandas numpy requests 2>&1 | tail -3 || \
-python3 -m ensurepip --upgrade 2>/dev/null && \
-python3 -m pip install --break-system-packages --quiet \
-    matplotlib pandas numpy requests 2>&1 | tail -3 || true
+# install deps via apt (most reliable on Ubuntu, no pip flag issues)
+if ! python3 -c "import matplotlib" 2>/dev/null; then
+    log "installing python3 stats dependencies via apt..."
+    sudo apt-get install -y -q python3-matplotlib python3-pandas python3-numpy python3-requests 2>&1 | tail -5
+fi
 
 python3 /srv/Capstone/src/stats/daily_stats.py
 
