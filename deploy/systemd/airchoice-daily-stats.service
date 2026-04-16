@@ -1,0 +1,16 @@
+[Unit]
+Description=AirChoice Daily Stats Report (PNG + HTML + webhook)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/srv/Capstone
+ExecStart=/bin/bash /srv/Capstone/scripts/run_daily_stats.sh
+StandardOutput=journal
+StandardError=journal
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
