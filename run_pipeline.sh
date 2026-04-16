@@ -6,18 +6,25 @@
 set -euo pipefail
 
 LOG_DIR="/srv/Capstone/logs"
-WEBHOOK="python3 /srv/Capstone/src/utils/webhook.py"
+PYTHON="/usr/bin/python3"
+WEBHOOK_PY="/srv/Capstone/src/utils/webhook.py"
 mkdir -p "$LOG_DIR"
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_DIR}/cron.log"
+}
+
+send() {
+    # send <event> [args...]
+    # python3 path 명시 - systemd minimal PATH 대응
+    $PYTHON $WEBHOOK_PY "$@" 2>> "${LOG_DIR}/webhook_error.log" || \
+        log "[WARN] webhook send failed: $*"
 }
 
 echo "========================================"
 log "pipeline start"
 echo "========================================"
 
-# capture collect start time (date +%-H: 0~23 integer, no leading zero)
 COLLECT_HOUR=$(date +%-H)
 COLLECT_DATE=$(date '+%Y-%m-%d')
 
@@ -31,10 +38,11 @@ if docker exec capstone-crawler python -m src.crawler.gf_collect; then
     COLLECT_END=$(date +%s)
     ELAPSED=$(( (COLLECT_END - COLLECT_START) / 60 ))
     log "collect done (${ELAPSED}min)"
-    $WEBHOOK collect_done --elapsed "$ELAPSED" || true
+    send collect_done --elapsed "$ELAPSED"
 else
-    log "collect failed"
-    $WEBHOOK pipeline_fail --stage collector --error "gf_collect exited abnormally" || true
+    COLLECT_EXIT=$?
+    log "collect failed (exit=${COLLECT_EXIT})"
+    send pipeline_fail --stage collector --error "gf_collect exited abnormally (exit=${COLLECT_EXIT})"
     exit 1
 fi
 
@@ -45,11 +53,12 @@ log "INSERT start"
 
 if docker exec capstone-loader python -m src.loaders.gf_insert --hour "$COLLECT_HOUR" --date "$COLLECT_DATE"; then
     log "INSERT done"
-    $WEBHOOK insert_done --hour "$COLLECT_HOUR" --date "$COLLECT_DATE" || true
-    $WEBHOOK disk_warn || true
+    send insert_done --hour "$COLLECT_HOUR" --date "$COLLECT_DATE"
+    send disk_warn
 else
-    log "INSERT failed"
-    $WEBHOOK pipeline_fail --stage loader --error "gf_insert exited abnormally" || true
+    INSERT_EXIT=$?
+    log "INSERT failed (exit=${INSERT_EXIT})"
+    send pipeline_fail --stage loader --error "gf_insert exited abnormally (exit=${INSERT_EXIT})"
     exit 1
 fi
 
