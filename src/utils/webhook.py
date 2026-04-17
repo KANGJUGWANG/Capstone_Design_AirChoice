@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-src/utils/webhook.py
-역할: Discord 웹훅 알림 전송
-이벤트:
-  startup       초기 상태 스냅샷 (raw / DB / backup)
-  collect_done  --elapsed <분>
-  insert_done   --hour <0~23> --date <YYYY-MM-DD>
-  pipeline_fail --stage <collector|loader> --error <message>
-  backup_done   --size <크기> --file <파일명>
-  disk_warn
-"""
 from __future__ import annotations
 
 import argparse
@@ -26,6 +15,7 @@ from urllib.request import Request, urlopen
 PROJECT_ROOT = Path("/srv/Capstone")
 ENV_FILE = PROJECT_ROOT / ".env"
 DISK_WARN_THRESHOLD = 80
+BULLET = " \u00b7 "  # f-string 표현식 밖 정의 (Python 3.11 \u unescape 호환)
 
 
 def _load_env() -> dict:
@@ -42,7 +32,6 @@ def _load_env() -> dict:
 
 
 _ENV = _load_env()
-
 WEBHOOK_URL     = _ENV.get("DISCORD_WEBHOOK_URL", "")
 MYSQL_CONTAINER = "capstone-mysql"
 MYSQL_DATABASE  = _ENV.get("MYSQL_DATABASE", "capstone_db")
@@ -58,7 +47,7 @@ def _get_disk_info() -> dict:
         used_gb  = usage.used  / 1024 ** 3
         free_gb  = usage.free  / 1024 ** 3
         percent  = used_gb / total_gb * 100
-        display  = f"{used_gb:.1f} GB / {total_gb:.0f} GB · \uc794\uc5ec {free_gb:.1f} GB ({percent:.1f}%)"
+        display  = f"{used_gb:.1f} GB / {total_gb:.0f} GB \u00b7 \uc794\uc5ec {free_gb:.1f} GB ({percent:.1f}%)"
         return {"percent": percent, "display": display}
     except Exception:
         return {"percent": 0, "display": "\uc870\ud68c \uc2e4\ud328"}
@@ -96,22 +85,16 @@ def _query_int(sql: str, default: int = 0) -> int:
 
 
 def _send(embed: dict, max_retries: int = 3) -> bool:
-    """Discord embed 전송. 503/429 등 일시 장애 시 에크스포년셜셜 백오프로 재시도."""
     if not WEBHOOK_URL:
         print("[webhook] DISCORD_WEBHOOK_URL \ubbf8\uc124\uc815 \u2014 skip", file=sys.stderr)
         return False
-
     payload = {"content": "", "embeds": [embed]}
     data = json.dumps(payload).encode("utf-8")
-
     for attempt in range(max_retries):
         try:
             req = Request(
                 WEBHOOK_URL, data=data,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0",
-                },
+                headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
                 method="POST",
             )
             with urlopen(req, timeout=10) as resp:
@@ -120,12 +103,10 @@ def _send(embed: dict, max_retries: int = 3) -> bool:
                 print(f"[webhook] HTTP {resp.status} (\uc2dc\ub3c4 {attempt+1}/{max_retries})", file=sys.stderr)
         except URLError as e:
             print(f"[webhook] \uc804\uc1a1 \uc2e4\ud328 (\uc2dc\ub3c4 {attempt+1}/{max_retries}): {e}", file=sys.stderr)
-
         if attempt < max_retries - 1:
-            wait = 5 * (attempt + 1)  # 5s, 10s backoff
+            wait = 5 * (attempt + 1)
             print(f"[webhook] {wait}\ucd08 \ud6c4 \uc7ac\uc2dc\ub3c4...", file=sys.stderr)
             time.sleep(wait)
-
     return False
 
 
@@ -141,19 +122,12 @@ def _hour_label(hour: int) -> str:
     return f"{hour:02d}:00"
 
 
-# ---------------------------------------------------------------------------
-# startup
-# ---------------------------------------------------------------------------
 def startup() -> None:
     raw_dates = sorted(p.name for p in RAW_DIR.iterdir() if p.is_dir()) if RAW_DIR.exists() else []
-    if raw_dates:
-        raw_lines = "\n".join(
-            f"`{d}`: {sum(1 for _ in (RAW_DIR / d).rglob('*.json'))}\uac1c"
-            for d in raw_dates
-        )
-    else:
-        raw_lines = "\uc5c6\uc74c (\ucd08\uae30\ud654 \uc644\ub8cc)"
-
+    raw_lines = (
+        "\n".join(f"`{d}`: {sum(1 for _ in (RAW_DIR / d).rglob('*.json'))}\uac1c" for d in raw_dates)
+        if raw_dates else "\uc5c6\uc74c (\ucd08\uae30\ud654 \uc644\ub8cc)"
+    )
     total_obs   = _query_int("SELECT COUNT(*) FROM search_observation")
     total_offer = _query_int("SELECT COUNT(*) FROM flight_offer_observation")
     obs_rows = _query_rows(
@@ -163,10 +137,8 @@ def startup() -> None:
     db_detail = "\n".join(
         f"`{r[0]}`: {int(r[1])}\uac74" for r in obs_rows if len(r) == 2
     ) or "\uc5c6\uc74c (\ucd08\uae30\ud654 \uc644\ub8cc)"
-
     backup_files = sorted(BACKUP_DIR.glob("*.sql.gz")) if BACKUP_DIR.exists() else []
     backup_lines = "\n".join(f"`{f.name}`" for f in backup_files[-3:]) if backup_files else "\uc5c6\uc74c"
-
     disk = _get_disk_info()
     _send({
         "title": f"\uc218\uc9d1 \uc2dc\uc791 \u2014 {_today()} {_hour_label(datetime.now().hour)}",
@@ -182,17 +154,12 @@ def startup() -> None:
     })
 
 
-# ---------------------------------------------------------------------------
-# collect_done
-# ---------------------------------------------------------------------------
 def collect_done(elapsed_min: int) -> None:
     today = _today()
     collect_dir = RAW_DIR / today
     route_counts: dict[str, int] = {}
     total_files = 0
-
     if collect_dir.exists():
-        # 현재 회차 HH00 폴더만 집계 — 당일 전체 누적 표시 오류 수정
         collect_hour_str = datetime.now().strftime("%H") + "00"
         hour_dir = collect_dir / collect_hour_str
         scan_dir = hour_dir if hour_dir.exists() else collect_dir
@@ -208,14 +175,12 @@ def collect_done(elapsed_min: int) -> None:
             except Exception:
                 pass
         total_files += sum(1 for _ in scan_dir.rglob("*_roundtrip_*.json"))
-
     elapsed_h = elapsed_min // 60
     elapsed_m = elapsed_min % 60
     elapsed_str = f"{elapsed_h}h {elapsed_m}m" if elapsed_h else f"{elapsed_m}m"
     route_lines = "\n".join(
         f"`{route}`: {cnt:,}\uac74" for route, cnt in sorted(route_counts.items())
     ) or "\uc9d1\uacc4 \uc5c6\uc74c"
-
     collect_hour = datetime.now().hour
     _send({
         "title": f"\uc218\uc9d1 \uc644\ub8cc \u2014 {today} {_hour_label(collect_hour)}",
@@ -229,9 +194,6 @@ def collect_done(elapsed_min: int) -> None:
     })
 
 
-# ---------------------------------------------------------------------------
-# insert_done
-# ---------------------------------------------------------------------------
 def insert_done(collect_hour: int, collect_date: str) -> None:
     obs_count = _query_int(f"""
         SELECT COUNT(*) FROM search_observation
@@ -254,7 +216,6 @@ def insert_done(collect_hour: int, collect_date: str) -> None:
         f"`{r[0]}`: {int(r[1]):,}\uac74 ({int(r[1]) / max(offer_count, 1) * 100:.1f}%)"
         for r in status_rows if len(r) == 2
     ) or "\uc5c6\uc74c"
-
     price_row = _query_rows(f"""
         SELECT MIN(f.price_krw), MAX(f.price_krw), ROUND(AVG(f.price_krw))
         FROM flight_offer_observation f
@@ -271,7 +232,6 @@ def insert_done(collect_hour: int, collect_date: str) -> None:
             price_str = f"\ucd5c\uc800 {int(r[0]):,}\uc6d0 / \ucd5c\uace0 {int(r[1]):,}\uc6d0 / \ud3c9\uade0 {int(r[2]):,}\uc6d0"
         except Exception:
             pass
-
     total_obs   = _query_int("SELECT COUNT(*) FROM search_observation")
     total_offer = _query_int("SELECT COUNT(*) FROM flight_offer_observation")
     yesterday_offer = _query_int(f"""
@@ -281,12 +241,15 @@ def insert_done(collect_hour: int, collect_date: str) -> None:
         WHERE DATE(s.observed_at) = DATE_SUB('{collect_date}', INTERVAL 1 DAY)
         AND HOUR(s.observed_at) = {collect_hour}
     """)
+    # delta_str: f-string 표현식 밖에서 조립 (Python 3.11 backslash 금지 우회)
     delta_str = ""
     if yesterday_offer > 0:
         delta = offer_count - yesterday_offer
         sign = "+" if delta >= 0 else ""
         delta_str = f"\uc804\ud68c\ucc28 \ub300\ube44 {sign}{delta:,}\uac74"
-
+    footer_text = f"AirChoice \u00b7 {_now_str()}"
+    if delta_str:
+        footer_text = footer_text + BULLET + delta_str
     disk = _get_disk_info()
     _send({
         "title": f"\uc801\uc7ac \uc644\ub8cc \u2014 {collect_date} {_hour_label(collect_hour)}",
@@ -298,13 +261,10 @@ def insert_done(collect_hour: int, collect_date: str) -> None:
             {"name": "DB \ub204\uc801", "value": f"search: {total_obs:,}\uac74 / offer: {total_offer:,}\uac74", "inline": False},
             {"name": "\ub514\uc2a4\ud06c", "value": disk["display"], "inline": False},
         ],
-        "footer": {"text": f"AirChoice \u00b7 {_now_str()}{' \u00b7 ' + delta_str if delta_str else ''}"},
+        "footer": {"text": footer_text},
     })
 
 
-# ---------------------------------------------------------------------------
-# pipeline_fail
-# ---------------------------------------------------------------------------
 def pipeline_fail(stage: str, error: str) -> None:
     _send({
         "title": f"\ud30c\uc774\ud504\ub77c\uc778 \uc2e4\ud328 \u2014 {stage}",
@@ -319,9 +279,6 @@ def pipeline_fail(stage: str, error: str) -> None:
     })
 
 
-# ---------------------------------------------------------------------------
-# backup_done
-# ---------------------------------------------------------------------------
 def backup_done(size: str, filename: str) -> None:
     total_obs   = _query_int("SELECT COUNT(*) FROM search_observation")
     total_offer = _query_int("SELECT COUNT(*) FROM flight_offer_observation")
@@ -338,9 +295,6 @@ def backup_done(size: str, filename: str) -> None:
     })
 
 
-# ---------------------------------------------------------------------------
-# disk_warn
-# ---------------------------------------------------------------------------
 def disk_warn() -> None:
     disk = _get_disk_info()
     if disk["percent"] < DISK_WARN_THRESHOLD:
@@ -356,41 +310,30 @@ def disk_warn() -> None:
     })
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(description="AirChoice Discord webhook")
     sub = parser.add_subparsers(dest="event")
-
     sub.add_parser("startup")
-
     p_collect = sub.add_parser("collect_done")
     p_collect.add_argument("--elapsed", type=int, default=0)
-
     p_insert = sub.add_parser("insert_done")
     p_insert.add_argument("--hour", type=int, default=datetime.now().hour)
     p_insert.add_argument("--date", type=str, default=date.today().isoformat())
-
     p_fail = sub.add_parser("pipeline_fail")
     p_fail.add_argument("--stage", default="unknown")
     p_fail.add_argument("--error", default="\ube44\uc815\uc0c1 \uc885\ub8cc")
-
     p_backup = sub.add_parser("backup_done")
     p_backup.add_argument("--size", default="?")
     p_backup.add_argument("--file", default="?")
-
     sub.add_parser("disk_warn")
-
     args = parser.parse_args()
-
-    if args.event == "startup":        startup()
-    elif args.event == "collect_done": collect_done(args.elapsed)
-    elif args.event == "insert_done":  insert_done(args.hour, args.date)
+    if args.event == "startup":         startup()
+    elif args.event == "collect_done":  collect_done(args.elapsed)
+    elif args.event == "insert_done":   insert_done(args.hour, args.date)
     elif args.event == "pipeline_fail": pipeline_fail(args.stage, args.error)
-    elif args.event == "backup_done":  backup_done(args.size, args.file)
-    elif args.event == "disk_warn":    disk_warn()
-    else:                              parser.print_help()
+    elif args.event == "backup_done":   backup_done(args.size, args.file)
+    elif args.event == "disk_warn":     disk_warn()
+    else:                               parser.print_help()
 
 
 if __name__ == "__main__":
