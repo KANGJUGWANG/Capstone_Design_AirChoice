@@ -17,6 +17,12 @@ RCLONE_DEST="${RCLONE_REMOTE}:AirChoice_Backup/db"
 PYTHON="/usr/bin/python3"
 WEBHOOK_PY="${PROJECT_ROOT}/src/utils/webhook.py"
 
+# rclone rate limit 설정
+# --tpslimit 1      : 초당 API 호출 1회로 제한 (rateLimitExceeded 방지)
+# --retries 5       : 실패 시 최대 5회 재시도
+# --retries-sleep 30s : 재시도 간격 30초
+RCLONE_OPTS="--tpslimit 1 --retries 5 --retries-sleep 30s --log-level INFO --log-file ${LOG_FILE}"
+
 mkdir -p "${BACKUP_TMP_DIR}" "${LOG_DIR}"
 
 log() {
@@ -29,7 +35,6 @@ send() {
 }
 
 send_fail() {
-    # stage error 메시지로 pipeline_fail 웹훅 전송
     local stage="$1" msg="$2"
     send pipeline_fail --stage "backup_${stage}" --error "${msg}"
 }
@@ -52,6 +57,13 @@ if [[ -z "${MYSQL_PASSWORD}" ]]; then
     log "[ERROR] MYSQL_ROOT_PASSWORD 미설정"
     send_fail "init" "MYSQL_ROOT_PASSWORD not set"
     exit 1
+fi
+
+# 잔류 압축본 정리 (이전 실패로 남은 파일)
+if ls "${BACKUP_TMP_DIR}"/*.sql.gz 2>/dev/null | grep -q .; then
+    log "[CLEAN] 잔류 압축본 삭제..."
+    rm -f "${BACKUP_TMP_DIR}"/*.sql.gz
+    log "[CLEAN] 완료"
 fi
 
 DATE_TAG=$(date '+%Y%m%d_%H%M%S')
@@ -78,12 +90,12 @@ fi
 DUMP_SIZE=$(du -sh "${DUMP_FILE}" | cut -f1)
 log "[1/3] 완료 — 크기: ${DUMP_SIZE}"
 
-# 2. rclone upload
-log "[2/3] Google Drive 업로드 중..."
-if ! rclone copy "${DUMP_FILE}" "${RCLONE_DEST}" \
-    --log-level INFO --log-file "${LOG_FILE}"; then
+# 2. rclone upload (tpslimit + retry 적용)
+log "[2/3] Google Drive 업로드 중... (rate limit 대응 모드)"
+if ! rclone copy "${DUMP_FILE}" "${RCLONE_DEST}" ${RCLONE_OPTS}; then
     log "[ERROR] rclone 업로드 실패"
     send_fail "rclone" "rclone upload to ${RCLONE_DEST} failed"
+    rm -f "${DUMP_FILE}"
     exit 1
 fi
 log "[2/3] 완료 — 경로: ${RCLONE_DEST}/${DUMP_FILENAME}"
